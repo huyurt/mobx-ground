@@ -1,7 +1,3 @@
----
-typora-copy-images-to: images
----
-
 # Notes About MobX
 
 ## 1. Introduction

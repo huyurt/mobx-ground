@@ -18,7 +18,7 @@ export default class x01FirstStore {
         modified: new Date()
     };
 
-    @action incrementCount = () => {
+    @action incrementCount = async () => {
         this.cart.itemCount++;
     };
 }

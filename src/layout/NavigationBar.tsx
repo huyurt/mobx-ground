@@ -5,13 +5,12 @@ import {NavLink} from "react-router-dom";
 
 const NavigationBar: React.FC = () => {
     return (
-        <Menu fixed="top" inverted vertical>
+        <Menu fixed="top" vertical>
             <Container>
-                <Menu.Item
-                    as={NavLink}
-                    to="/x01First"
-                    name="x01First"
-                />
+                <Menu.Item header as={NavLink} exact to="/">
+                    Ana Sayfa
+                </Menu.Item>
+                <Menu.Item name="01 First" as={NavLink} to="/01"/>
             </Container>
         </Menu>
     );
