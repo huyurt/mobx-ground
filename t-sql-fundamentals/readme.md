@@ -665,6 +665,8 @@ WHERE lastname LIKE N'[^A-E]%'
 
 If you want to search for a character that is also used as a wildcard (such as %, _, [, or ]), you can use an escape character.
 
+------
+
 #### Working with date and time data
 
 ##### Date and time data types
@@ -714,5 +716,556 @@ SELECT PARSE('02/12/2016' AS DATE USING 'en-GB')
 
 The `PARSE` function is significantly more expensive than the `CONVERT` function.
 
-##### Working with date and time separately
+##### Date and time functions
+
+`GETDATE`, `CURRENT_TIMESTAMP`, `GETUTCDATE`, `SYSDATETIME`, `SYSUTCDATETIME`, `SYSDATETIMEOFFSET`, `CAST`, `CONVERT`, `SWITCHOFFSET`, `AT TIME ZONE`, `TODATETIMEOFFSET`, `DATEADD`, `DATEDIFF` and `DATEDIFF_BIG`, `DATEPART`, `YEAR`, `MONTH`, `DAY`, `DATENAME`, various `FROMPARTS` functions, and `EOMONTH`.
+
+##### Current date and time
+
+`GETDATE`, `CURRENT_TIMESTAMP`, `GETUTCDATE`, `SYSDATETIME`, `SYSUTCDATETIME`, and `SYSDATETIMEOFFSET`.
+
+| Function          | Return type    | Description                                          |
+| ----------------- | -------------- | ---------------------------------------------------- |
+| GETDATE           | DATETIME       | Current date and time                                |
+| CURRENT_TIMESTAMP | DATETIME       | Same as GETDATE but ANSI SQL-compliant               |
+| GETUTCDATE        | DATETIME       | Current date and time in UTC                         |
+| SYSDATETIME       | DATETIME2      | Current date and time                                |
+| SYSUTCDATETIME    | DATETIME2      | Current date and time in UTC                         |
+| SYSDATETIMEOFFSET | DATETIMEOFFSET | Current date and time, including the offset from UTC |
+
+````sql
+SELECT
+	GETDATE()           AS [GETDATE],
+	CURRENT_TIMESTAMP   AS [CURRENT_TIMESTAMP],
+	GETUTCDATE()        AS [GETUTCDATE],
+	SYSDATETIME()       AS [SYSDATETIME],
+	SYSUTCDATETIME()    AS [SYSUTCDATETIME],
+	SYSDATETIMEOFFSET() AS [SYSDATETIMEOFFSET];
+
+SELECT
+	CAST(SYSDATETIME() AS DATE) AS [current_date],
+	CAST(SYSDATETIME() AS TIME) AS [current_time];
+````
+
+##### The `CAST`, `CONVERT,` and `PARSE` functions and their `TRY_` counterparts
+
+- `CAST (value AS datatype)`
+- `TRY_CAST (value AS datatype)`
+- `CONVERT (datatype, value [, style_number])`
+- `TRY_CONVERT (datatype, value [, style_number])`
+- `PARSE (value AS datatype [USING culture])`
+- `TRY_PARSE (value AS datatype [USING culture])`
+
+##### The `SWITCHOFFSET` function
+
+`SWITCHOFFSET(datetimeoffset_value, UTC_offset)`
+
+````sql
+SELECT SWITCHOFFSET(SYSDATETIMEOFFSET(), '-05:00');
+-- Adjusts the current system datetimeoffset value to offset –05:00.
+````
+
+##### The `TODATETIMEOFFSET` function
+
+`TODATETIMEOFFSET(local_date_and_time_value, UTC_offset)`
+
+##### The `AT TIME ZONE` function
+
+`dt_val AT TIME ZONE time_zone`: The `AT TIME ZONE` function accepts an input date and time value and converts it to a `datetimeoffset` value that corresponds to the specified target time zone.
+
+The input _dt_val_ can be of the following data types: `DATETIME`, `SMALLDATETIME`, `DATETIME2`, and `DATETIMEOFFSET`. The input _time_zone_ can be any of the supported Windows time-zone names as they appear in the name column in the `sys.time_zone_info` view.
+
+````sql
+SELECT name, current_utc_offset, is_currently_dst
+FROM sys.time_zone_info;
+
+SELECT
+	CAST('20160212 12:00:00.0000000' AS DATETIME2)
+		AT TIME ZONE 'Pacific Standard Time' AS val1,
+	CAST('20160812 12:00:00.0000000' AS DATETIME2)
+		AT TIME ZONE 'Pacific Standard Time' AS val2;
+
+-- val1                               val2
+-- ---------------------------------- ----------------------------------
+-- 2016-02-12 12:00:00.0000000 -08:00 2016-08-12 12:00:00.0000000 -07:00
+````
+
+##### The `DATEADD` function
+
+`DATEADD(part, n, dt_val)`:  Add a specified number of units of a specified date part to an input date and time value.
+
+_part_: `year`, `quarter`, `month`, `dayofyear`, `day`, `week`, `weekday`, `hour`, `minute`, `second`, `millisecond`, `microsecond`, `nanosecond`
+
+````sql
+SELECT DATEADD(year, 1, '20160212') -- 2017-02-12 00:00:00.000
+````
+
+##### The `DATEDIFF` and `DATEDIFF_BIG` functions
+
+`DATEDIFF(part, dt_val1, dt_val2), DATEDIFF_BIG(part, dt_val1, dt_val2)`
+
+````sql
+SELECT DATEDIFF(day, '20150212', '20160212'); -- 366
+SELECT DATEDIFF_BIG(millisecond, '00010101', '20160212');
+````
+
+##### The `DATEPART` function
+
+`DATEPART(part, dt_val)`
+
+_part_: `year`, `quarter`, `month`, `dayofyear`, `day`, `week`, `weekday`, `hour`, `minute`, `second`, `millisecond`, `microsecond`, `nanosecond`, `TZoffset`, `ISO_WEEK`
+
+````sql
+SELECT DATEPART(month, '20160212') -- 2
+````
+
+##### The `YEAR`, `MONTH`, and `DAY` functions
+
+`YEAR(dt_val), MONTH(dt_val), DAY(dt_val)`
+
+````sql
+SELECT
+	DAY('20160212') AS theday,
+	MONTH('20160212') AS themonth,
+	YEAR('20160212') AS theyear
+	
+-- theday      themonth    theyear
+-- ----------- ----------- -----------
+-- 12          2           2016
+````
+
+##### The `DATENAME` function
+
+`DATENAME(dt_val, part)`
+
+````sql
+SELECT DATENAME(month, '20160212'); -- February
+SELECT DATENAME(year, '20160212'); -- 2016
+````
+
+##### The `ISDATE` function
+
+`ISDATE(string)`
+
+````sql
+SELECT ISDATE('20160212'); -- 1
+SELECT ISDATE('20160230'); -- 0
+````
+
+##### The `FROMPARTS` function
+
+The _FROMPARTS_ functions accept integer inputs representing parts of a date and time value and construct a value of the requested type from those parts.
+
+- `DATEFROMPARTS (year, month, day)`,
+-  `DATETIME2FROMPARTS (year, month, day, hour, minute, seconds, fractions, precision)`,
+-  `DATETIMEFROMPARTS (year, month, day, hour, minute, seconds, milliseconds)`,
+-  `DATETIMEOFFSETFROMPARTS (year, month, day, hour, minute, seconds, fractions, hour_offset, minute_offset, precision)`,
+-  `SMALLDATETIMEFROMPARTS (year, month, day, hour, minute)`,
+-  `TIMEFROMPARTS (hour, minute, seconds, fractions, precision)`
+
+````sql
+SELECT
+	DATEFROMPARTS(2016, 02, 12),
+	DATETIME2FROMPARTS(2016, 02, 12, 13, 30, 5, 1, 7),
+	DATETIMEFROMPARTS(2016, 02, 12, 13, 30, 5, 997),
+	DATETIMEOFFSETFROMPARTS(2016, 02, 12, 13, 30, 5, 1, -8, 0,7),
+	SMALLDATETIMEFROMPARTS(2016, 02, 12, 13, 30),
+	TIMEFROMPARTS(13, 30, 5, 1, 7);
+````
+
+##### The `EOMONTH` function
+
+`EOMONTH(input [, months_to_add])`: Accepts an input date and time value and returns the respective end-of-month date as a `DATE` typed value.
+
+````sql
+SELECT EOMONTH(SYSDATETIME()); --  returns the end of the current month
+
+SELECT orderid, orderdate, custid, empid
+FROM Sales.Orders
+WHERE orderdate = EOMONTH(orderdate); -- returns orders placed on the last day of the month
+````
+
+### Querying Metadata
+
+SQL Server provides tools for getting information about the metadata of objects, such as information about tables in a database and columns in a table. Those tools include catalog views, information schema views, and system stored procedures and functions.
+
+#### Catalog views
+
+Catalog views provide detailed information about objects in the database, including information that is specific to SQL Server.
+
+````sql
+SELECT SCHEMA_NAME(schema_id) AS table_schema_name, name AS table_name
+FROM sys.tables;
+
+-- table_schema_name  table_name
+-- ------------------ --------------
+-- HR                 Employees
+-- Production         Suppliers
+-- Production         Categories
+-- Production         Products
+-- Sales              Customers
+-- Sales              Shippers
+-- Sales              Orders
+-- Sales              OrderDetails
+-- Stats              Tests
+-- Stats              Scores
+-- dbo                Nums
+````
+
+The _SCHEMA_NAME_ function is used to convert the schema ID integer to its name.
+
+To get information about columns in a table, you can query the _sys.columns_ table.
+
+Returns information about columns in the _Sales.Orders_ table, including column names, data types (with the system type ID translated to a name by using the _TYPE_NAME_ function), maximum length, collation name, and nullability:
+
+````sql
+SELECT
+	name AS column_name,
+	TYPE_NAME(system_type_id) AS column_type,
+	max_length,
+	collation_name,
+	is_nullable
+FROM sys.columns
+WHERE object_id = OBJECT_ID(N'Sales.Orders');
+
+-- column_name     column_type  max_length collation_name        is_nullable
+-- --------------- ------------ ---------- --------------------- ----------
+-- orderid         int          4          NULL                  0
+-- custid          int          4          NULL                  1
+-- empid           int          4          NULL                  0
+-- orderdate       date         3          NULL                  0
+-- requireddate    date         3          NULL                  0
+-- shippeddate     date         3          NULL                  1
+-- shipperid       int          4          NULL                  0
+-- freight         money        8          NULL                  0
+-- shipname        nvarchar     80         Latin1_General_CI_AS  0
+-- shipaddress     nvarchar     120        Latin1_General_CI_AS  0
+-- shipcity        nvarchar     30         Latin1_General_CI_AS  0
+-- shipregion      nvarchar     30         Latin1_General_CI_AS  1
+-- shippostalcode  nvarchar     20         Latin1_General_CI_AS  1
+-- shipcountry     nvarchar     30         Latin1_General_CI_AS  0
+````
+
+#### Information schema views
+
+An information schema view is a set of views that resides in a schema called `INFORMATION_SCHEMA` and provides metadata information in a standard manner.
+
+````sql
+SELECT TABLE_SCHEMA, TABLE_NAME
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_TYPE = N'BASE TABLE';
+
+SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, COLLATION_NAME, IS_NULLABLE
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = N'Sales' AND TABLE_NAME = N'Orders';
+````
+
+#### System stored procedures and functions
+
+The `sp_tables` stored procedure returns a list of objects (such as tables and views) that can be queried in the current database:
+
+````sql
+EXEC sys.sp_tables
+````
+
+The `sp_help` procedure accepts an object name as input and returns multiple result sets with general information about the object, and also information about columns, indexes, constraints, and more:
+
+````sql
+EXEC sys.sp_help
+	@objname = N'Sales.Orders'
+````
+
+The `sp_columns` procedure returns information about columns in an object:
+
+````sql
+EXEC sys.sp_columns
+	@table_name = N'Orders',
+	@table_owner = N'Sales'
+````
+
+The `sp_helpconstraint` procedure returns information about constraints in an object:
+
+````sql
+EXEC sys.sp_helpconstraint
+	@objname = N'Sales.Orders'
+````
+
+The `SERVERPROPERTY` function returns the requested property of the current instance:
+
+````sql
+SELECT SERVERPROPERTY('ProductLevel')
+````
+
+The `DATABASEPROPERTYEX` function returns the requested property of the specified database name:
+
+````sql
+SELECT DATABASEPROPERTYEX(N'TSQLV4', 'Collation')
+````
+
+The `OBJECTPROPERTY` function returns the requested property of the specified object name:
+
+````sql
+SELECT OBJECTPROPERTY(OBJECT_ID(N'Sales.Orders'), 'TableHasPrimaryKey')
+````
+
+The `COLUMNPROPERTY` function returns the requested property of a specified column:
+
+````sql
+SELECT COLUMNPROPERTY(OBJECT_ID(N'Sales.Orders'), N'shipcountry', 'AllowsNull')
+````
+
+### Exercises
+
+1. Write a query against the _Sales.Orders_ table that returns orders placed in June 2015:
+
+   - Tables involved: _TSQLV4_ database and the _Sales.Orders_ table
+   - Desired output (abbreviated):
+
+   ````sql
+   -- orderid     orderdate  custid      empid
+   -- ----------- ---------- ----------- -----------
+   -- 10555       2015-06-02 71          6
+   -- 10556       2015-06-03 73          2
+   -- 10557       2015-06-03 44          9
+   -- 10558       2015-06-04 4           1
+   -- 10559       2015-06-05 7           6
+   -- 10560       2015-06-06 25          8
+   -- 10561       2015-06-06 24          2
+   -- 10562       2015-06-09 66          1
+   -- 10563       2015-06-10 67          2
+   -- 10564       2015-06-10 65          4
+   -- ...
+   -- (30 row(s) affected)
+   ````
+
+   ````sql
+   SELECT orderid, orderdate, custid, empid
+   FROM Sales.Orders
+   WHERE YEAR(orderdate) = 2015 AND MONTH(orderdate) = 6
+   ````
+
+2. Write a query against the _Sales.Orders_ table that returns orders placed on the last day of the month:
+
+   - Tables involved: _TSQLV4_ database and the _Sales.Orders_ table
+   - Desired output (abbreviated):
+
+   ````sql
+   -- orderid     orderdate  custid      empid
+   -- ----------- ---------- ----------- -----------
+   -- 10269       2014-07-31 89          5
+   -- 10317       2014-09-30 48          6
+   -- 10343       2014-10-31 44          4
+   -- 10399       2014-12-31 83          8
+   -- 10432       2015-01-31 75          3
+   -- 10460       2015-02-28 24          8
+   -- 10461       2015-02-28 46          1
+   -- 10490       2015-03-31 35          7
+   -- 10491       2015-03-31 28          8
+   -- 10522       2015-04-30 44          4
+   -- ...
+   -- (26 row(s) affected)
+   ````
+
+   ````sql
+   SELECT orderid, orderdate, custid, empid
+   FROM Sales.Orders
+   WHERE orderdate = EOMONTH(orderdate)
+   ````
+
+3. Write a query against the _HR.Employees_ table that returns employees with a last name containing the letter e twice or more:
+
+   - Tables involved: _TSQLV4_ database and the _HR.Employees_ table
+   - Desired output:
+
+   ````sql
+   -- empid       firstname  lastname
+   -- ----------- ---------- --------------------
+   -- 4           Yael       Peled
+   -- 5           Sven       Mortensen
+   -- (2 row(s) affected)
+   ````
+
+   ````sql
+   SELECT empid, firstname, lastname
+   FROM HR.Employees
+   WHERE lastname LIKE '%e%e%'
+   ````
+
+4. Write a query against the _Sales.OrderDetails_ table that returns orders with a total value (quantity * unitprice) greater than 10,000, sorted by total value:
+
+   - Tables involved: _TSQLV4_ database and the _Sales.OrderDetails_ table
+   - Desired output:
+
+   ````sql
+   -- orderid     totalvalue
+   -- ----------- ---------------------
+   -- 10865       17250.00
+   -- 11030       16321.90
+   -- 10981       15810.00
+   -- 10372       12281.20
+   -- 10424       11493.20
+   -- 10817       11490.70
+   -- 10889       11380.00
+   -- 10417       11283.20
+   -- 10897       10835.24
+   -- 10353       10741.60
+   -- 10515       10588.50
+   -- 10479       10495.60
+   -- 10540       10191.70
+   -- 10691       10164.80
+   -- (14 row(s) affected)
+   ````
+
+   ````sql
+   SELECT orderid, SUM(quantity * unitprice) AS totalvalue
+   FROM Sales.OrderDetails
+   GROUP BY orderid
+   HAVING SUM(quantity * unitprice) > 10000
+   ````
+
+5. To check the validity of the data, write a query against the _HR.Employees_ table that returns employees with a last name that starts with a lowercase English letter in the range a through z. Remember that the collation of the sample database is case insensitive (`Latin1_General_CI_AS`):
+
+   - Tables involved: _TSQLV4_ database and the _HR.Employees_ table
+   - Desired output is an empty set:
+
+   ````sql
+   -- empid       lastname
+   -- ----------- --------------------
+   -- (0 row(s) affected))
+   ````
+
+   ````sql
+   SELECT empid, lastname
+   FROM HR.Employees
+   WHERE lastname COLLATE Latin1_General_CI_AS LIKE N'[a-z]%'
+   ````
+
+6. Write a query against the _Sales.Orders_ table that returns the three shipped-to countries with the highest average freight in 2015:
+
+   - Tables involved: _TSQLV4_ database and the _Sales.Orders_ table
+   - Desired output:
+
+   ````sql
+   -- shipcountry     avgfreight
+   -- --------------- ---------------------
+   -- Austria         178.3642
+   -- Switzerland     117.1775
+   -- Sweden          105.16
+   -- (3 row(s) affected)
+   ````
+
+   ````sql
+   SELECT TOP (3) shipcountry, AVG(freight) AS avgfreight
+   FROM Sales.Orders
+   WHERE orderdate >= '20150101' AND orderdate < '20160101'
+   GROUP BY shipcountry
+   ORDER BY avgfreight DESC;
+   
+   SELECT shipcountry, AVG(freight) AS avgfreight
+   FROM Sales.Orders
+   WHERE orderdate >= '20150101' AND orderdate < '20160101'
+   GROUP BY shipcountry
+   ORDER BY avgfreight DESC
+   OFFSET 0 ROWS FETCH NEXT 3 ROWS ONLY;
+   ````
+
+7. Write a query against the _Sales.Orders_ table that calculates row numbers for orders based on order date ordering (using the order ID as the tiebreaker) for each customer separately:
+
+   - Tables involved: _TSQLV4_ database and the _Sales.Orders_ table
+   - Desired output (abbreviated):
+
+   ````sql
+   -- custid      orderdate  orderid     rownum
+   -- ----------- ---------- ----------- --------------------
+   -- 1           2015-08-25 10643       1
+   -- 1           2015-10-03 10692       2
+   -- 1           2015-10-13 10702       3
+   -- 1           2016-01-15 10835       4
+   -- 1           2016-03-16 10952       5
+   -- 1           2016-04-09 11011       6
+   -- 2           2014-09-18 10308       1
+   -- 2           2015-08-08 10625       2
+   -- 2           2015-11-28 10759       3
+   -- 2           2016-03-04 10926       4
+   -- ...
+   -- (830 row(s) affected)
+   ````
+
+   ````sql
+   SELECT custid, orderdate, orderid,  ROW_NUMBER() OVER(PARTITION BY custid ORDER BY orderdate, orderid) AS rownum
+   FROM Sales.Orders
+   ORDER BY custid, rownum;
+   ````
+
+8. Using the _HR.Employees_ table, write a `SELECT` statement that returns for each employee the gender based on the title of courtesy. For ‘Ms.’ and ‘Mrs.’ return ‘Female’; for ‘Mr.’ return ‘Male’; and in all other cases (for example, ‘Dr.‘) return ‘Unknown’:
+
+   - Tables involved: _TSQLV4_ database and the _HR.Employees_ table
+   - Desired output:
+
+   ````sql
+   -- empid       firstname  lastname             titleofcourtesy           gender
+   -- ----------- ---------- -------------------- ------------------------- -------
+   -- 1           Sara       Davis                Ms.                       Female
+   -- 2           Don        Funk                 Dr.                       Unknown
+   -- 3           Judy       Lew                  Ms.                       Female
+   -- 4           Yael       Peled                Mrs.                      Female
+   -- 5           Sven       Mortensen            Mr.                       Male
+   -- 6           Paul       Suurs                Mr.                       Male
+   -- 7           Russell    King                 Mr.                       Male
+   -- 8           Maria      Cameron              Ms.                       Female
+   -- 9           Patricia   Doyle                Ms.                       Female
+   -- (9 row(s) affected)
+   ````
+
+   ````sql
+   SELECT empid, firstname, lastname, titleofcourtesy,
+   	CASE
+   		WHEN titleofcourtesy IN('Ms.', 'Mrs.') THEN 'Female'
+   		WHEN titleofcourtesy = 'Mr.'           THEN 'Male'
+   		ELSE                                        'Unknown'
+   	END AS gender
+   FROM HR.Employees
+   ````
+
+9. Write a query against the _Sales.Customers_ table that returns for each customer the customer ID and region. Sort the rows in the output by region, having `NULL`s sort last (after non-`NULL` values). Note that the default sort behavior for `NULL`s in T-SQL is to sort first (before non-`NULL` values):
+
+   - Tables involved: _TSQLV4_ database and the _Sales.Customers_ table
+   - Desired output (abbreviated):
+
+   ````sql
+   -- custid      region
+   -- ----------- ---------------
+   -- 55          AK
+   -- 10          BC
+   -- 42          BC
+   -- 45          CA
+   -- 37          Co. Cork
+   -- 33          DF
+   -- 71          ID
+   -- 38          Isle of Wight
+   -- 46          Lara
+   -- 78          MT
+   -- ...
+   -- 1           NULL
+   -- 2           NULL
+   -- 3           NULL
+   -- 4           NULL
+   -- 5           NULL
+   -- 6           NULL
+   -- 7           NULL
+   -- 8           NULL
+   -- 9           NULL
+   -- 11          NULL
+   -- ...
+   -- (91 row(s) affected)
+   ````
+
+   ````sql
+   SELECT custid, region
+   FROM Sales.Customers
+   ORDER BY
+   	CASE WHEN region IS NULL THEN 1 ELSE 0 END, region
+   ````
+
+## 3. Joins
 
