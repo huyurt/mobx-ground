@@ -1269,3 +1269,90 @@ SELECT COLUMNPROPERTY(OBJECT_ID(N'Sales.Orders'), N'shipcountry', 'AllowsNull')
 
 ## 3. Joins
 
+Table operators: `JOIN`, `APPLY`, `PIVOT`, `UNPIVOT`
+
+`JOIN` operator types:
+
+- `CROSS JOIN`: Cartesian product
+- `INNER JOIN`: Cartesian product, filter
+- `OUTER JOIN`: Cartesian product, filter, add outer rows
+
+### `CROSS JOIN`s
+
+The `CROSS JOIN` is the simplest type of join. Each row from one input is matched with all rows from the other. So if you have m rows in one table and n rows in the other, you get m×n rows in the result.
+
+````sql
+-- ISO/ANSI SQL-92 syntax
+SELECT C.custid, E.empid
+FROM Sales.Customers AS C
+	CROSS JOIN HR.Employees AS E
+````
+
+````sql
+-- ISO/ANSI SQL-89 syntax
+SELECT C.custid, E.empid
+FROM Sales.Customers AS C, HR.Employees AS E
+````
+
+### `INNER JOIN`s
+
+The `INNER` keyword is optional, because an `INNER` join is the default.
+
+````sql
+-- ISO/ANSI SQL-92 syntax
+SELECT E.empid, E.firstname, E.lastname, O.orderidFROM HR.Employees AS E
+INNER JOIN Sales.Orders AS O
+	ON E.empid = O.empid
+````
+
+````sql
+-- ISO/ANSI SQL-89 syntax
+SELECT E.empid, E.firstname, E.lastname, O.orderid
+FROM HR.Employees AS E, Sales.Orders AS O
+WHERE E.empid = O.empid
+````
+
+#### Composite joins
+
+ You usually need such a join when a primary key–foreign key relationship is based on more than one attribute.
+
+````sql
+SELECT OD.orderid, OD.productid, OD.qty,ODA.dt, ODA.loginname, ODA.oldval, ODA.newval
+FROM Sales.OrderDetails AS OD
+	INNER JOIN Sales.OrderDetailsAudit AS ODA
+		ON OD.orderid = ODA.orderid
+		AND OD.productid = ODA.productid
+WHERE ODA.columnname = N'qty'
+````
+
+#### Non-Equi joins
+
+When a join condition involves only an equality operator, the join is said to be an equi join. When a join condition involves any operator besides equality, the join is said to be a non-equi join.
+
+````sql
+SELECT  E1.empid, E1.firstname, E1.lastname, E2.empid, E2.firstname, E2.lastname
+FROM HR.Employees AS E1
+	INNER JOIN HR.Employees AS E2
+		ON E1.empid < E2.empid
+````
+
+#### Multi-join queries
+
+````sql
+SELECT  C.custid, C.companyname, O.orderid, OD.productid, OD.qty
+FROM Sales.Customers AS C
+	INNER JOIN Sales.Orders AS O
+		ON C.custid = O.custid
+	INNER JOIN Sales.OrderDetails AS OD
+		ON O.orderid = OD.orderid
+````
+
+### `OUTER JOIN`s
+
+#### Fundamentals of `OUTER JOIN`s
+
+The `OUTER` keyword is optional.
+
+- `LEFT OUTER JOIN`
+- `RIGHT OUTER JOIN`
+- `FULL OUTER JOIN`
