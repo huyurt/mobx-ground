@@ -1356,3 +1356,310 @@ The `OUTER` keyword is optional.
 - `LEFT OUTER JOIN`
 - `RIGHT OUTER JOIN`
 - `FULL OUTER JOIN`
+
+##### Using `OUTER JOIN`s in a multi join query
+
+````sql
+SELECT C.custid, O.orderid, OD.productid, OD.qty
+FROM Sales.Customers AS C 
+	LEFT OUTER JOIN      
+		(Sales.Orders AS O   
+			INNER JOIN Sales.OrderDetails AS OD
+         		ON O.orderid = OD.orderid)  
+		ON C.custid = O.custid
+````
+
+### Exercises
+
+1. Write a query that generates five copies of each employee row:
+
+   - Tables involved: _HR.Employees_ and _dbo.Nums_
+   - Desired output:
+
+   ````sql
+   -- empid       firstname  lastname             n
+   -- ----------- ---------- -------------------- -----------
+   -- 1           Sara       Davis                1
+   -- 2           Don        Funk                 1
+   -- 3           Judy       Lew                  1
+   -- 4           Yael       Peled                1
+   -- 5           Sven       Mortensen            1
+   -- 6           Paul       Suurs                1
+   -- 7           Russell    King                 1
+   -- ...
+   -- 1           Sara       Davis                2
+   -- 2           Don        Funk                 2
+   -- 3           Judy       Lew                  2
+   -- 4           Yael       Peled                2
+   -- ...
+   -- 8           Maria      Cameron              5
+   -- 9           Patricia   Doyle                5
+   -- (45 row(s) affected)
+   ````
+
+   ````sql
+   SELECT E.empid, E.firstname, E.lastname, N.n
+   FROM HR.Employees AS E
+   	CROSS JOIN dbo.Nums AS N
+   WHERE N.n <= 5
+   ORDER BY N.n, E.empid
+   ````
+
+   1-2. Write a query that returns a row for each employee and day in the range June 12, 2016 through June 16, 2016:
+
+   - Tables involved: _HR.Employees_ and _dbo.Nums_
+   - Desired output:
+
+   ````sql
+   -- empid       dt
+   -- ----------- -----------
+   -- 1           2016-06-12
+   -- 1           2016-06-13
+   -- 1           2016-06-14
+   -- 1           2016-06-15
+   -- 1           2016-06-16
+   -- 2           2016-06-12
+   -- 2           2016-06-13
+   -- 2           2016-06-14
+   -- 2           2016-06-15
+   -- 2           2016-06-16
+   -- 3           2016-06-12
+   -- 3           2016-06-13
+   -- 3           2016-06-14
+   -- ...
+   -- 9           2016-06-14
+   -- 9           2016-06-15
+   -- 9           2016-06-16
+   -- (45 row(s) affected)
+   ````
+
+   ````sql
+   SELECT E.empid, DATEADD(day, D.n - 1, CAST('20160612' AS DATE)) AS dt
+   FROM HR.Employees AS E
+   	CROSS JOIN dbo.Nums AS D
+   WHERE D.n <= DATEDIFF(day, '20160612', '20160616') + 1
+   ORDER BY empid, dt
+   ````
+
+2. Explain what’s wrong in the following query, and provide a correct alternative:
+
+   ````sql
+   SELECT Customers.custid, Customers.companyname, Orders.orderid, Orders.orderdate
+   FROM Sales.Customers AS C
+   	INNER JOIN Sales.Orders AS O
+       	ON Customers.custid = Orders.custid
+   ````
+
+   ````sql
+   --  In all subsequent phases of logical query processing, the original table names are not accessible, rather only the shorter aliases are.
+   SELECT C.custid, C.companyname, O.orderid, O.orderdate
+   FROM Sales.Customers AS C
+   	INNER JOIN Sales.Orders AS O
+       	ON C.custid = O.custid
+   ````
+
+3. Return USA customers, and for each customer return the total number of orders and total quantities:
+
+   - Tables involved: _Sales.Customers_, _Sales.Orders_, and _Sales.Order_
+   - Details Desired output:
+
+   ````sql
+   -- custid      numorders   totalqty
+   -- ----------- ----------- -----------
+   -- 32          11          345
+   -- 36          5           122
+   -- 43          2           20
+   -- 45          4           181
+   -- 48          8           134
+   -- 55          10          603
+   -- 65          18          1383
+   -- 71          31          4958
+   -- 75          9           327
+   -- 77          4           46
+   -- 78          3           59
+   -- 82          3           89
+   -- 89          14          1063
+   -- (13 row(s) affected)
+   ````
+
+   ````sql
+   SELECT C.custid, COUNT(DISTINCT O.orderid) AS numorders, SUM(OD.qty) AS totalqty
+   FROM Sales.Customers AS C
+   	INNER JOIN Sales.Orders AS O
+       	ON O.custid = C.custid
+   	INNER JOIN Sales.OrderDetails AS OD
+   		ON OD.orderid = O.orderid
+   WHERE C.country = N'USA'
+   GROUP BY C.custid
+   ````
+
+4. Return customers and their orders, including customers who placed no orders:
+
+   - Tables involved: _Sales.Customers_ and _Sales.Orders_
+   - Desired output (abbreviated):
+
+   ````sql
+   -- custid      companyname     orderid     orderdate
+   -- ----------- --------------- ----------- -----------
+   -- 85          Customer ENQZT  10248       2014-07-04
+   -- 79          Customer FAPSM  10249       2014-07-05
+   -- 34          Customer IBVRG  10250       2014-07-08
+   -- 84          Customer NRCSK  10251       2014-07-08
+   -- ...
+   -- 73          Customer JMIKW  11074       2016-05-06
+   -- 68          Customer CCKOT  11075       2016-05-06
+   -- 9           Customer RTXGC  11076       2016-05-06
+   -- 65          Customer NYUHS  11077       2016-05-06
+   -- 22          Customer DTDMN  NULL        NULL
+   -- 57          Customer WVAXS  NULL        NULL
+   -- (832 row(s) affected)
+   ````
+
+   ````sql
+   SELECT C.custid, C.companyname, O.orderid, O.orderdate
+   FROM Sales.Customers AS C
+   	LEFT OUTER JOIN Sales.Orders AS O
+       	ON O.custid = C.custid
+   ````
+
+5. Return customers who placed no orders: 
+
+   - Tables involved: _Sales.Customers_ and _Sales.Orders_
+   - Desired output:
+
+   ````sql
+   -- custid      companyname
+   -- ----------- ---------------
+   -- 22          Customer DTDMN
+   -- 57          Customer WVAXS
+   -- (2 row(s) affected)
+   ````
+
+   ````sql
+   SELECT C.custid, C.companyname
+   FROM Sales.Customers AS C
+   	LEFT OUTER JOIN Sales.Orders AS O
+   		ON O.custid = C.custid
+   WHERE O.orderid IS NULL
+   ````
+
+6. Return customers with orders placed on February 12, 2016, along with their orders:
+
+   - Tables involved: _Sales.Customers_ and _Sales.Orders_
+   - Desired output:
+
+   ````sql
+   -- custid      companyname     orderid     orderdate
+   -- ----------- --------------- ----------- ----------
+   -- 48          Customer DVFMB  10883       2016-02-12
+   -- 45          Customer QXPPT  10884       2016-02-12
+   -- 76          Customer SFOGW  10885       2016-02-12
+   -- (3 row(s) affected)
+   ````
+
+   ````sql
+   SELECT C.custid, C.companyname, O.orderid, O.orderdate
+   FROM Sales.Customers AS C
+   	INNER JOIN Sales.Orders AS O
+   		ON O.custid = C.custid
+   WHERE O.orderdate = '20160212'
+   ````
+
+7. Write a query that returns all customers in the output, but matches them with their respective orders only if they were placed on February 12, 2016:
+
+   - Tables involved: _Sales.Customers_ and _Sales.Orders_
+   - Desired output (abbreviated):
+
+   ````sql
+   -- custid      companyname     orderid     orderdate
+   -- ----------- --------------- ----------- ----------
+   -- 72          Customer AHPOP  NULL        NULL
+   -- 58          Customer AHXHT  NULL        NULL
+   -- 25          Customer AZJED  NULL        NULL
+   -- 18          Customer BSVAR  NULL        NULL
+   -- 91          Customer CCFIZ  NULL        NULL
+   -- 68          Customer CCKOT  NULL        NULL
+   -- 49          Customer CQRAA  NULL        NULL
+   -- 24          Customer CYZTN  NULL        NULL
+   -- 22          Customer DTDMN  NULL        NULL
+   -- 48          Customer DVFMB  10883       2016-02-12
+   -- ...
+   -- 69          Customer SIUIH  NULL        NULL
+   -- 86          Customer SNXOJ  NULL        NULL
+   -- 88          Customer SRQVM  NULL        NULL
+   -- 54          Customer TDKEG  NULL        NULL
+   -- 20          Customer THHDP  NULL        NULL
+   -- ...
+   -- (91 row(s) affected)
+   ````
+
+   ````sql
+   SELECT C.custid, C.companyname, O.orderid, O.orderdate
+   FROM Sales.Customers AS C
+   	LEFT OUTER JOIN Sales.Orders AS O
+   		ON O.custid = C.custid AND O.orderdate = '20160212'
+   ````
+
+8. Return all customers, and for each return a Yes/No value depending on whether the customer placed orders on February 12, 2016:
+
+   - Tables involved: _Sales.Customers_ and _Sales.Orders_
+   - Desired output (abbreviated):
+
+   ````sql
+   -- custid      companyname     HasOrderOn20160212
+   -- ----------- --------------- ------------------
+   -- ...
+   -- 40          Customer EFFTC  No
+   -- 41          Customer XIIWM  No
+   -- 42          Customer IAIJK  No
+   -- 43          Customer UISOJ  No
+   -- 44          Customer OXFRU  No
+   -- 45          Customer QXPPT  Yes
+   -- 46          Customer XPNIK  No
+   -- 47          Customer PSQUZ  No
+   -- 48          Customer DVFMB  Yes
+   -- 49          Customer CQRAA  No
+   -- 50          Customer JYPSC  No
+   -- 51          Customer PVDZC  No
+   -- 52          Customer PZNLA  No
+   -- 53          Customer GCJSG  No
+   -- ...
+   -- (91 row(s) affected)
+   ````
+
+   ````sql
+   SELECT DISTINCT C.custid, C.companyname,
+   	CASE WHEN O.orderid IS NOT NULL THEN 'Yes' ELSE 'No' END AS HasOrderOn20160212
+   FROM Sales.Customers AS C
+   	LEFT OUTER JOIN Sales.Orders AS O
+   		ON O.custid = C.custid AND O.orderdate = '20160212'
+   ````
+
+## 4. Subqueries
+
+- Self-contained subqueries
+- Correlated subqueries
+
+A subquery can return single-value (scalar subqueries), multivalue (multivalued subqueries), or table-valued (table subqueries)
+
+### Self-Contained Subqueries
+
+Self-contained subqueries are subqueries that are independent of the tables in the outer query. The subquery code is evaluated only once before the outer query is evaluated, and then the outer query uses the result of the subquery.
+
+#### Self-contained scalar subquery
+
+A scalar subquery is a subquery that returns a single value.
+
+````sql
+SELECT orderid, orderdate, empid, custid
+FROM Sales.Orders
+WHERE orderid = (SELECT MAX(O.orderid)
+                 FROM Sales.Orders AS O)
+-- orderid      orderdate   empid        custid
+-- ------------ ----------- ------------ -----------
+-- 11077        2016-05-06  1            65
+````
+
+#### Self-contained multivalued subquery
+
+A multivalued subquery is a subquery that returns multiple values as a single column. Some predicates, such as the `IN`, `SOME`, `ANY`, and `ALL` predicate, operate on a multivalued subquery.
