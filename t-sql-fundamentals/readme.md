@@ -2085,3 +2085,7 @@ WHERE shipper_id IN (SELECT O.shipperid
 
 ## 5. Table Expressions
 
+- Derived tables
+- Commontable expressions (CTEs)
+- Views
+- Inline table-valued functions (inline TVFs)
