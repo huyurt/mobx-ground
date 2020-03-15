@@ -1711,6 +1711,21 @@ EXISTS(SELECT * FROM ...) -- bad
 EXISTS(SELECT 1 FROM ...) -- better
 ````
 
+````sql
+SELECT custid, companyname
+FROM Sales.Customers AS C
+WHERE country = N'Spain'
+	AND EXISTS
+    	(SELECT * FROM Sales.Orders AS O
+         WHERE O.custid = C.custid)
+-- custid      companyname
+-- ----------- ----------------
+-- 8           Customer QUHWH
+-- 29          Customer MDLWA
+-- 30          Customer KSLQF
+-- 69          Customer SIUIH
+````
+
 ### Using Running Aggregates
 
 Running aggregates are aggregates that accumulate values based on some order.
@@ -1873,7 +1888,8 @@ WHERE shipper_id IN (SELECT O.shipperid
 
    ````sql
    -- country
-   -- ---------------Argentina
+   -- ---------------
+   -- Argentina
    -- Austria
    -- Belgium
    -- Brazil
@@ -1956,19 +1972,17 @@ WHERE shipper_id IN (SELECT O.shipperid
    SELECT custid, companyname
    FROM Sales.Customers AS C
    WHERE EXISTS
-   		(SELECT *
+   		(SELECT 1
         	FROM Sales.Orders AS O
         	WHERE O.custid = C.custid
-        		AND O.orderdate >= '20150101'
-        		AND O.orderdate < '20160101')
+        		AND YEAR(O.orderdate) = 2015)
    	AND NOT EXISTS
-       	(SELECT *
+       	(SELECT 1
             FROM Sales.Orders AS O
             WHERE O.custid = C.custid
-   	         AND O.orderdate >= '20160101'
-       	     AND O.orderdate < '20170101')
+   	         AND YEAR(O.orderdate) = 2016)
    ````
-
+   
 7. Write a query that returns customers who ordered product 12:
 
    -  Tables involved: _Sales.Customers_, _Sales.Orders_, and _Sales.Order_
@@ -1996,11 +2010,11 @@ WHERE shipper_id IN (SELECT O.shipperid
    SELECT custid, companyname
    FROM Sales.Customers AS C
    WHERE EXISTS
-   	(SELECT *
+   	(SELECT 1
         FROM Sales.Orders AS O
         WHERE O.custid = C.custid
         	AND EXISTS
-        		(SELECT *
+        		(SELECT 1
                 FROM Sales.OrderDetails AS OD
                 WHERE OD.orderid = O.orderid
                 	AND OD.ProductID = 12))
