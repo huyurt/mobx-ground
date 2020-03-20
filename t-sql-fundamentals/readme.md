@@ -2100,6 +2100,258 @@ WHERE shipper_id IN (SELECT O.shipperid
 ## 5. Table Expressions
 
 - Derived tables
-- Commontable expressions (CTEs)
+- Common table expressions (CTEs)
 - Views
 - Inline table-valued functions (inline TVFs)
+
+### Derived Tables
+
+Derived tables (also known as table subqueries) are defined in the `FROM` clause of an outer query. Their scope of existence is the outer query. As soon as the outer query is finished, the derived table is gone.
+
+````sql
+SELECT *
+FROM (SELECT custid, companyname
+      FROM Sales.Customers
+      WHERE country = N'USA') AS USACusts
+````
+
+- Order is not guaranteed
+- All columns must have names
+- All column names must be unique
+
+#### Assigning column aliases
+
+In any clause of the outer query, you can refer to column aliases that were assigned in the `SELECT` clause of the inner query. This behavior helps you get around the fact that you can’t refer to column aliases assigned in the `SELECT` clause in query clauses that are logically processed prior to the `SELECT` clause (for example, WHERE or GROUP BY).
+
+````sql
+SELECT YEAR(orderdate) AS orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM Sales.Orders
+GROUP BY orderyear
+-- Msg 207, Level 16, State 1, Line 5
+-- Invalid column name 'orderyear'.
+````
+
+````sql
+SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM (SELECT YEAR(orderdate) AS orderyear, custid
+      FROM Sales.Orders) AS D
+GROUP BY orderyear
+-- orderyear   numcusts
+-- ----------- -----------
+-- 2014        67
+-- 2015        86
+-- 2016        81
+````
+
+#### Using arguments
+
+In the query that defines a derived table, you can refer to arguments. The arguments can be local variables and input parameters to a routine, such as a stored procedure or function.
+
+````sql
+DECLARE @empid AS INT = 3;
+
+SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM (SELECT YEAR(orderdate) AS orderyear, custid
+      FROM Sales.Orders
+      WHERE empid = @empid) AS D
+GROUP BY orderyear
+-- orderyear   numcusts
+-- ----------- -----------
+-- 2014        16
+-- 2015        46
+-- 2016        30
+````
+
+#### Nesting
+
+If you need to define a derived table based on a query that itself is based on a derived table, you can nest those. Nesting tends to complicate the code and reduces its readability.
+
+````sql
+SELECT orderyear, numcusts
+FROM (SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+      FROM (SELECT YEAR(orderdate) AS orderyear, custid
+            FROM Sales.Orders) AS D1      
+      GROUP BY orderyear) AS D2
+WHERE numcusts > 70
+-- orderyear   numcusts
+-- ----------- -----------
+-- 2015        86
+-- 2016        81
+````
+
+Alternative:
+
+````sql
+SELECT YEAR(orderdate) AS orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM Sales.Orders
+GROUP BY YEAR(orderdate)
+HAVING COUNT(DISTINCT custid) > 70
+````
+
+#### Multiple references
+
+Related to cases where you need to join multiple instances of the same one. A join treats its two inputs as a set and, as you know, a set has no order to its elements. This means that if you define a derived table and alias it as one input of the join, you can’t refer to the same alias in the other input of the join.
+
+````sql
+SELECT Cur.orderyear,
+	Cur.numcusts AS curnumcusts, Prv.numcusts AS prvnumcusts,  
+	Cur.numcusts - Prv.numcusts AS growth
+FROM (SELECT YEAR(orderdate) AS orderyear,
+      COUNT(DISTINCT custid) AS numcusts
+      FROM Sales.Orders
+      GROUP BY YEAR(orderdate)) AS Cur
+	LEFT OUTER JOIN
+    	(SELECT YEAR(orderdate) AS orderyear, COUNT(DISTINCT custid) AS numcusts
+         FROM Sales.Orders
+         GROUP BY YEAR(orderdate)) AS Prv
+         	ON Cur.orderyear = Prv.orderyear + 1
+-- orderyear   curnumcusts prvnumcusts growth
+-- ----------- ----------- ----------- -----------
+-- 2014        67          NULL        NULL
+-- 2015        86          67          19
+-- 2016        81          86          –5
+````
+
+### Common Table Expressions (CTEs)
+
+CTEs are defined by using a `WITH` statement and have the following general form:
+
+````sql
+WITH <CTE_Name>[(<target_column_list>)]
+AS
+(
+    <inner_query_defining_CTE>
+)
+<outer_query_against_CTE>
+````
+
+The inner query defining the CTE must follow all requirements mentioned earlier to be valid to define a table expression.
+
+````sql
+WITH USACusts AS
+(
+    SELECT custid, companyname
+    FROM Sales.Customers
+    WHERE country = N'USA'
+)
+SELECT * FROM USACusts
+````
+
+#### Assigning column aliases in CTEs
+
+CTEs also support two forms of column aliasing: inline and external. For the inline form, specify \<expression> AS \<column_alias>; for the external form, specify the target column list in parentheses immediately after the CTE name.
+
+Inline form:
+
+````sql
+WITH C AS
+(
+    SELECT YEAR(orderdate) AS orderyear, custid
+    FROM Sales.Orders
+)
+SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM C
+GROUP BY orderyear
+````
+
+External form:
+
+````sql
+WITH C(orderyear, custid) AS
+(
+    SELECT YEAR(orderdate), custid
+    FROM Sales.Orders
+)
+SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM C
+GROUP BY orderyear
+````
+
+#### Using arguments in CTEs
+
+As with derived tables, you also can use arguments in the inner query used to define a CTE.
+
+````sql
+DECLARE @empid AS INT = 3;
+
+WITH C AS
+(
+    SELECT YEAR(orderdate) AS orderyear, custid
+    FROM Sales.Orders
+    WHERE empid = @empid
+)
+SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+FROM C
+GROUP BY orderyear
+````
+
+#### Defining multiple CTEs
+
+````sql
+WITH C1 AS
+(
+    SELECT YEAR(orderdate) AS orderyear, custid
+    FROM Sales.Orders
+),
+C2 AS
+(
+    SELECT orderyear, COUNT(DISTINCT custid) AS numcusts
+    FROM C1
+    GROUP BY orderyear
+)
+SELECT orderyear, numcusts
+FROM C2
+WHERE numcusts > 70
+````
+
+#### Multiple references in CTEs
+
+````sql
+WITH YearlyCount AS
+(
+    SELECT YEAR(orderdate) AS orderyear, COUNT(DISTINCT custid) AS numcusts
+    FROM Sales.Orders
+    GROUP BY YEAR(orderdate)
+)
+SELECT Cur.orderyear, Cur.numcusts AS curnumcusts, Prv.numcusts AS prvnumcusts,
+	Cur.numcusts - Prv.numcusts AS growth
+FROM YearlyCount AS Cur
+	LEFT OUTER JOIN YearlyCount AS Prv
+    	ON Cur.orderyear = Prv.orderyear + 1
+````
+
+#### Recursive CTEs
+
+CTEs are unique among table expressions in the sense that they support recursion. Recursive CTEs, like nonrecursive ones, are defined by the SQL standard. A recursive CTE is defined by at least two queries (more are possible)—at least one query known as the anchor member and at least one query known as the recursive member.
+
+````sql
+WITH <CTE_Name>[(<target_column_list>)]
+AS
+(
+    <anchor_member>
+    UNION ALL
+    <recursive_member>
+)
+<outer_query_against_CTE>
+````
+
+The anchor member is a query that returns a valid relational result table—like a query that is used to define a nonrecursive table expression. The anchor member query is invoked only once.
+
+````sql
+WITH EmpsCTE AS
+(
+    SELECT empid, mgrid, firstname, lastname
+    FROM HR.Employees
+    WHERE empid = 2
+    UNION ALL
+    SELECT C.empid, C.mgrid, C.firstname, C.lastname
+    FROM EmpsCTE AS P
+    	INNER JOIN HR.Employees AS C
+    		ON C.mgrid = P.empid
+)
+SELECT empid, mgrid, firstname, lastname
+FROM EmpsCTE
+````
+
+### Views
+
