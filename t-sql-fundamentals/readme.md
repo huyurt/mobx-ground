@@ -2355,3 +2355,463 @@ FROM EmpsCTE
 
 ### Views
 
+````sql
+DROP VIEW IF EXISTS Sales.USACusts;
+GO
+CREATE VIEW Sales.USACusts
+AS
+SELECT custid, companyname, contactname, contacttitle,address, city, region, 	postalcode, country, phone, fax
+FROM Sales.Customers
+WHERE country = N'USA';
+GO
+
+SELECT custid, companyname
+FROM Sales.USACusts
+````
+
+#### The `ENCRYPTION` option
+
+The `ENCRYPTION` option indicates that SQL Server will internally store the text with the definition of the object in an obfuscated format. The obfuscated text is not directly visible to users through any of the catalog objects—only to privileged users through special means.
+
+````sql
+ALTER VIEW Sales.USACusts WITH ENCRYPTION
+AS
+SELECT custid, companyname, contactname, contacttitle,address, city, region, 	postalcode, country, phone, fax
+FROM Sales.Customers
+WHERE country = N'USA';
+GO
+
+SELECT OBJECT_DEFINITION(OBJECT_ID('Sales.USACusts'));
+-- NULL (not return code, because view has been encryption)
+
+EXEC sp_helptext 'Sales.USACusts';
+-- The text for object 'Sales.USACusts' is encrypted.
+````
+
+#### The `SCHEMABINDING` option
+
+It indicates that referenced objects cannot be dropped and that referenced columns cannot be dropped or altered.
+
+````sql
+ALTER VIEW Sales.USACusts WITH SCHEMABINDING
+AS
+SELECT custid, companyname, contactname, contacttitle, address, city, region, 	postalcode, country, phone, fax
+FROM Sales.Customers
+WHERE country = N'USA';
+GO
+
+ALTER TABLE Sales.Customers DROP COLUMN address;
+-- Msg 5074, Level 16, State 1, Line 346
+-- The object 'USACusts' is dependent on column'address'.
+-- Msg 4922, Level 16, State 9, Line 346
+-- ALTER TABLE DROP COLUMN address failed because one ormore objects access this column.
+````
+
+#### The `CHECK OPTION` option
+
+The purpose of `CHECK OPTION` is to prevent modifications through the view that conflict with the view’s filter.
+
+````sql
+ALTER VIEW Sales.USACusts WITH SCHEMABINDING
+AS
+SELECT custid, companyname, contactname, contacttitle, address, city, region, 	postalcode, country, phone, fax
+FROM Sales.Customers
+WHERE country = N'USA'
+WITH CHECK OPTION;
+GO
+
+INSERT INTO Sales.USACusts(companyname, contactname, contacttitle, address, city, region, postalcode, country, phone, fax) VALUES(N'Customer FGHIJ', N'Contact FGHIJ', N'TitleFGHIJ', N'Address FGHIJ', N'London', NULL, N'12345', N'UK', N'012-3456789', N'012-3456789')
+-- Msg 550, Level 16, State 1, Line 387
+-- The attempted insert or update failed because the target view either specifies WITH CHECK OPTION or spans a view that specifies WITH CHECK OPTION and one or more rows resulting from the operation did not qualify under the CHECK OPTION constraint. The statement has been terminated.
+````
+
+### Inline Table-Valued Functions (Inline TVFs)
+
+Inline TVFs are reusable table expressions that support input parameters. TVFs as parameterized views, even though they are not formally referred to this way.
+
+````sql
+DROP FUNCTION IF EXISTS dbo.GetCustOrders;
+GO
+CREATE FUNCTION dbo.GetCustOrders
+	(@cid AS INT) RETURNS TABLE
+AS
+RETURN
+	SELECT orderid, custid, empid, orderdate, requireddate, shippeddate, 			shipperid, freight, shipname, shipaddress, shipcity, shipregion, 			shippostalcode, shipcountry
+    FROM Sales.Orders
+    WHERE custid = @cid;
+GO
+
+SELECT orderid, custid
+FROM dbo.GetCustOrders(1) AS O
+-- orderid     custid
+-- ----------- -----------
+-- 10643       1
+-- 10692       1
+-- 10702       1
+-- 10835       1
+-- 10952       1
+-- 11011       1
+````
+
+````sql
+SELECT O.orderid, O.custid, OD.productid, OD.qty
+FROM dbo.GetCustOrders(1) AS O
+	INNER JOIN Sales.OrderDetails AS OD
+		ON O.orderid = OD.orderid
+-- orderid     custid      productid   qty
+-- ----------- ----------- ----------- ------
+-- 10643       1           28          15
+-- 10643       1           39          21
+-- 10643       1           46           2
+-- 10692       1           63          20
+-- 10702       1            3           6
+-- 10702       1           76          15
+-- 10835       1           59          15
+-- 10835       1           77           2
+-- 10952       1            6          16
+-- 10952       1           28           2
+-- 11011       1           58          40
+-- 11011       1           71          20
+````
+
+#### The `APPLY` operator
+
+- APPLY
+- CROSS APPLY
+- OUTER APPLY
+
+````sql
+SELECT C.custid, A.orderid, A.orderdate
+FROM Sales.Customers AS C
+	CROSS APPLY (SELECT TOP (3) orderid, empid, orderdate, requireddate
+                 FROM Sales.Orders AS O
+                 WHERE O.custid = C.custid
+                 ORDER BY orderdate DESC, orderid DESC) AS A
+-- custid      orderid     orderdate
+-- ----------- ----------- -----------
+-- 1           11011       2016-04-09
+-- 1           10952       2016-03-16
+-- 1           10835       2016-01-15
+-- 2           10926       2016-03-04
+-- 2           10759       2015-11-28
+-- 2           10625       2015-08-08
+-- 3           10856       2016-01-28
+-- 3           10682       2015-09-25
+-- 3           10677       2015-09-22
+-- ...
+-- (263 row(s) affected)
+````
+
+````sql
+SELECT C.custid, A.orderid, A.orderdate
+FROM Sales.Customers AS C
+	OUTER APPLY (SELECT TOP (3) orderid, empid, orderdate, requireddate
+                 FROM Sales.Orders AS O
+                 WHERE O.custid = C.custid
+                 ORDER BY orderdate DESC, orderid DESC) AS A
+-- custid      orderid     orderdate
+-- ----------- ----------- -----------
+-- 1           11011       2016-04-09
+-- 1           10952       2016-03-16
+-- 1           10835       2016-01-15
+-- 2           10926       2016-03-04
+-- 2           10759       2015-11-28
+-- 2           10625       2015-08-08
+-- 3           10856       2016-01-28
+-- 3           10682       2015-09-25
+-- 3           10677       2015-09-22
+-- ...
+-- 22          NULL        NULL
+-- ...
+-- 57          NULL        NULL
+-- ...
+-- (265 row(s) affected)
+````
+
+### Exercises
+
+1. The following query attempts to filter orders that were not placed on the last day of the year. It’s supposed to return the order ID, order date, customer ID, employee ID, and respective end-of-year date for each order:
+
+   ````sql
+   SELECT orderid, orderdate, custid, empid,
+   	DATEFROMPARTS(YEAR(orderdate), 12, 31) AS endofyear
+   FROM Sales.Orders
+   WHERE orderdate <> endofyear
+   ````
+
+   When you try to run this query, you get the following error:
+
+   ````sql
+   -- Msg 207, Level 16, State 1, Line 233
+   -- Invalid column name 'endofyear'.
+   ````
+
+   Explain what the problem is, and suggest a valid solution.
+
+   ````sql
+   
+   ````
+
+2. Write a query that returns the maximum value in the _orderdate_ column for each employee:
+
+   - Table involved: _TSQLV4_ database, _Sales.Orders_ table
+   - Desired output:
+
+   ````sql
+   -- empid       maxorderdate
+   -- ----------- -------------
+   -- 3           2016-04-30
+   -- 6           2016-04-23
+   -- 9           2016-04-29
+   -- 7           2016-05-06
+   -- 1           2016-05-06
+   -- 4           2016-05-06
+   -- 2           2016-05-05
+   -- 5           2016-04-22
+   -- 8           2016-05-06
+   -- (9 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+3. Encapsulate the query from Exercise 2 in a derived table. Write a join query between the derived table and the _Orders_ table to return the orders with the maximum order date for each employee: 
+
+   - Table involved: _Sales.Orders_
+   - Desired output:
+
+   ````sql
+   -- empid       orderdate   orderid     custid
+   -- ----------- ----------- ----------- -----------
+   -- 9           2016-04-29  11058       6
+   -- 8           2016-05-06  11075       68
+   -- 7           2016-05-06  11074       73
+   -- 6           2016-04-23  11045       10
+   -- 5           2016-04-22  11043       74
+   -- 4           2016-05-06  11076       9
+   -- 3           2016-04-30  11063       37
+   -- 2           2016-05-05  11073       58
+   -- 2           2016-05-05  11070       44
+   -- 1           2016-05-06  11077       65
+   -- (10 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+4. Write a query that calculates a row number for each order based on _orderdate_, _orderid_ ordering: 
+
+   - Table involved: _Sales.Orders_
+   - Desired output (abbreviated):
+
+   ````sql
+   -- orderid     orderdate   custid      empid       rownum
+   -- ----------- ----------- ----------- ----------- -------
+   -- 10248       2014-07-04  85          5           1
+   -- 10249       2014-07-05  79          6           2
+   -- 10250       2014-07-08  34          4           3
+   -- 10251       2014-07-08  84          3           4
+   -- 10252       2014-07-09  76          4           5
+   -- 10253       2014-07-10  34          3           6
+   -- 10254       2014-07-11  14          5           7
+   -- 10255       2014-07-12  68          9           8
+   -- 10256       2014-07-15  88          3           9
+   -- 10257       2014-07-16  35          4           10
+   -- ...
+   -- (830 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+5. Write a query that returns rows with row numbers 11 through 20 based on the row-number definition in Exercise 4. Use a CTE to encapsulate the code from Exercise 4:
+
+   - Table involved: _Sales.Orders_
+   - Desired output:
+
+   ````sql
+   -- orderid     orderdate   custid      empid       rownum
+   -- ----------- ----------- ----------- ----------- -------
+   -- 10258       2014-07-17  20          1           11
+   -- 10259       2014-07-18  13          4           12
+   -- 10260       2014-07-19  56          4           13
+   -- 10261       2014-07-19  61          4           14
+   -- 10262       2014-07-22  65          8           15
+   -- 10263       2014-07-23  20          9           16
+   -- 10264       2014-07-24  24          6           17
+   -- 10265       2014-07-25  7           2           18
+   -- 10266       2014-07-26  87          3           19
+   -- 10267       2014-07-29  25          4           20
+   -- (10 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+6. Write a solution using a recursive CTE that returns the management chain leading to Patricia Doyle (employee ID 9):
+
+   - Table involved: _HR.Employees_
+   - Desired output:
+
+   ````sql
+   -- empid       mgrid       firstname  lastname
+   -- ----------- ----------- ---------- --------------------
+   -- 9           5           Patricia   Doyle
+   -- 5           2           Sven       Mortensen
+   -- 2           1           Don        Funk
+   -- 1           NULL        Sara       Davis
+   -- (4 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+7. Create a view that returns the total quantity for each employee and year:
+
+   - Tables involved: _Sales.Orders_ and _Sales.OrderDetails_
+   - When running the following code:
+
+   ````sql
+   SELECT * FROM Sales.VEmpOrders ORDER BY empid, orderyear
+   ````
+
+   - Desired output:
+
+   ````sql
+   -- empid       orderyear   qty
+   -- ----------- ----------- -----------
+   -- 1           2014        1620
+   -- 1           2015        3877
+   -- 1           2016        2315
+   -- 2           2014        1085
+   -- 2           2015        2604
+   -- 2           2016        2366
+   -- 3           2014        940
+   -- 3           2015        4436
+   -- 3           2016        2476
+   -- 4           2014        2212
+   -- 4           2015        5273
+   -- 4           2016        2313
+   -- 5           2014        778
+   -- 5           2015        1471
+   -- 5           2016        787
+   -- 6           2014        963
+   -- 6           2015        1738
+   -- 6           2016        826
+   -- 7           2014        485
+   -- 7           2015        2292
+   -- 7           2016        1877
+   -- 8           2014        923
+   -- 8           2015        2843
+   -- 8           2016        2147
+   -- 9           2014        575
+   -- 9           2015        955
+   -- 9           2016        1140
+   -- (27 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+8. Write a query against _Sales.VEmpOrders_ that returns the running total quantity for each employee and year:
+
+   - Table involved: _Sales.VEmpOrders_ view
+   - Desired output:
+
+   ````sql
+   -- empid       orderyear   qty         runqty
+   -- ----------- ----------- ----------- -----------
+   -- 1           2014        1620        1620
+   -- 1           2015        3877        5497
+   -- 1           2016        2315        7812
+   -- 2           2014        1085        1085
+   -- 2           2015        2604        3689
+   -- 2           2016        2366        6055
+   -- 3           2014        940         940
+   -- 3           2015        4436        5376
+   -- 3           2016        2476        7852
+   -- 4           2014        2212        2212
+   -- 4           2015        5273        7485
+   -- 4           2016        2313        9798
+   -- 5           2014        778         778
+   -- 5           2015        1471        2249
+   -- 5           2016        787         3036
+   -- 6           2014        963         963
+   -- 6           2015        1738        2701
+   -- 6           2016        826         3527
+   -- 7           2014        485         485
+   -- 7           2015        2292        2777
+   -- 7           2016        1877        4654
+   -- 8           2014        923         923
+   -- 8           2015        2843        3766
+   -- 8           2016        2147        5913
+   -- 9           2014        575         575
+   -- 9           2015        955         1530
+   -- 9           2016        1140        2670
+   -- (27 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+9. Create an inline TVF that accepts as inputs a supplier ID (_@supid AS INT_) and a requested number of products (_@n AS INT_). The function should return _@n_ products with the highest unit prices that are supplied by the specified supplier ID:
+
+   - Table involved: _Production.Products_
+   - When issuing the following query:
+
+   ````sql
+   SELECT * FROM Production.TopProducts(5, 2)
+   ````
+
+   - Desired output:
+
+   ````sql
+   -- productid   productname        unitprice
+   -- ----------- ------------------ ---------------
+   -- 12          Product OSFNS      38.00
+   -- 11          Product QMVUN      21.00
+   -- (2 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+10. Using the `CROSS APPLY` operator and the function you created in Exercise 9, return the two most expensive products for each supplier:
+
+    - Table involved: _Production.Suppliers_
+    - Desired output (shown here in abbreviated form):
+
+    ````sql
+    -- supplierid  companyname       productid   productname     unitprice
+    -- ----------- ----------------- ----------- --------------- ----------
+    -- 8           Supplier BWGYE    20          ProductQHFFP   81.00
+    -- 8           Supplier BWGYE    68          ProductTBTBL   12.50
+    -- 20          Supplier CIYNM    43          ProductZZZHR   46.00
+    -- 20          Supplier CIYNM    44          ProductVJIEO   19.45
+    -- 23          Supplier ELCRN    49          ProductFPYPN   20.00
+    -- 23          Supplier ELCRN    76          ProductJYGFE   18.00
+    -- 5           Supplier EQPNC    12          ProductOSFNS   38.00
+    -- 5           Supplier EQPNC    11          ProductQMVUN   21.00
+    -- ...
+    -- (55 row(s) affected)
+    ````
+
+    - When you’re done, run the following code for cleanup:
+
+    ````sql
+    DROP VIEW IF EXISTS Sales.VEmpOrders;
+    DROP FUNCTION IF EXISTS Production.TopProducts;
+    ````
+
+    ````sql
+    
+    ````
+
