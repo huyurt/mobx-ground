@@ -2815,3 +2815,283 @@ FROM Sales.Customers AS C
     
     ````
 
+## 6. Set Operators
+
+- `UNION`: `DISTINCT` version
+- `UNION ALL`: `ALL` doesn’t attempt to remove duplicates and therefore returns a multiset. 
+- `INTERSECT`
+- `EXCEPT`
+
+### The `UNION` Operator
+
+![union](C:\Users\PC\IntelliJIDEAProjects\book-summary\t-sql-fundamentals\images\union.png)
+
+````sql
+SELECT country, region, city 
+FROM HR.Employees
+UNION
+SELECT country, region, city 
+FROM Sales.Customers
+
+-- country         region          city
+-- --------------- --------------- ---------------
+-- Argentina       NULL            Buenos Aires
+-- Austria         NULL            Graz
+-- Austria         NULL            Salzburg
+-- Belgium         NULL            Bruxelles
+-- Belgium         NULL            Charleroi
+-- ...
+-- USA             WY              Lander
+-- Venezuela       DF              Caracas
+-- Venezuela       Lara            Barquisimeto
+-- Venezuela       Nueva Esparta   I. de Margarita
+-- Venezuela       Táchira         San Cristóbal
+-- (71 row(s) affected)
+````
+
+#### The `UNION ALL` operator
+
+````sql
+SELECT country, region, city 
+FROM HR.Employees
+UNION ALL
+SELECT country, region, city 
+FROM Sales.Customers
+
+-- country         region          city
+-- --------------- --------------- ---------------
+-- USA             WA              Seattle
+-- USA             WA              Tacoma
+-- USA             WA              Kirkland
+-- USA             WA              Redmond
+-- UK              NULL            London
+-- UK              NULL            London
+-- UK              NULL            London
+-- ...
+-- Finland         NULL            Oulu
+-- Brazil          SP              Resende
+-- USA             WA              Seattle
+-- Finland         NULL            Helsinki
+-- Poland          NULL            Warszawa
+-- (100 row(s) affected)
+````
+
+### The `INTERSECT` Operator
+
+The `INTERSECT` operator returns only the rows that are common to the results of the two input queries.
+
+![intersect](C:\Users\PC\IntelliJIDEAProjects\book-summary\t-sql-fundamentals\images\intersect.png)
+
+````sql
+SELECT country, region, city 
+FROM HR.Employees
+INTERSECT
+SELECT country, region, city 
+FROM Sales.Customers
+-- country         region          city
+-- --------------- --------------- ---------------
+-- UK              NULL            London
+-- USA             WA              Kirkland
+-- USA             WA              Seattle
+````
+
+#### The `INTERSECT` (`ALL`) operator
+
+Not supports by T-SQL.
+
+````sql
+WITH INTERSECT_ALLAS
+(
+    SELECT ROW_NUMBER()
+    		OVER(PARTITION BY country, region, city
+                 ORDER     BY (SELECT 0)) AS rownum,
+    	country, region, city
+    FROM HR.Employees  
+    INTERSECT
+    SELECT ROW_NUMBER()
+    		OVER(PARTITION BY country, region, city
+                 ORDER     BY (SELECT 0)),
+    	country, region, city
+    FROM Sales.Customers
+)
+SELECT country, region, city
+FROM INTERSECT_ALL
+-- country         region          city
+-- --------------- --------------- ---------------
+-- UK              NULL            London
+-- USA             WA              Kirkland
+-- USA             WA              Seattle
+-- UK              NULL            London
+-- UK              NULL            London
+-- UK              NULL            London
+````
+
+### The `EXPECT` Operator
+
+The `EXCEPT` operator returns only distinct rows that appear in the first set but not the second.
+
+![except](C:\Users\PC\IntelliJIDEAProjects\book-summary\t-sql-fundamentals\images\except.png)
+
+````sql
+SELECT country, region, city 
+FROM HR.Employees
+EXCEPT
+SELECT country, region, city 
+FROM Sales.Customers
+-- country         region          city
+-- --------------- --------------- ---------------
+-- USA             WA              Redmond
+-- USA             WA              Tacoma
+````
+
+#### The `EXCEPT` (`ALL`) operator
+
+Not supports by T-SQL.
+
+````sql
+WITH EXCEPT_ALLAS(
+    SELECT ROW_NUMBER()
+    	OVER(PARTITION BY country, region, city
+        	 ORDER     BY (SELECT 0)) AS rownum,
+    	country, region, city    
+    FROM HR.Employees  
+    EXCEPT  
+    SELECT ROW_NUMBER()
+    	OVER(PARTITION BY country, region, city
+             ORDER     BY (SELECT 0)),
+    country, region, city
+    FROM Sales.Customers
+)
+SELECT country, region, city
+FROM EXCEPT_ALL
+-- country         region          city
+-- --------------- --------------- ---------------
+-- USA             WA              Redmond
+-- USA             WA              Tacoma
+-- USA             WA              Seattle
+````
+
+### Precedence
+
+The `INTERSECT` operator precedes `UNION` and `EXCEPT`, and `UNION` and `EXCEPT` are evaluated in order of appearance.
+
+### Exercises
+
+1. Write a query that generates a virtual auxiliary table of 10 numbers in the range 1 through 10 without using a looping construct. You do not need to guarantee any order of the rows in the output of your solution:
+
+   - Tables involved:
+   - None Desired output:
+
+   ````sql
+   -- n
+   -- -----------
+   -- 1
+   -- ...
+   -- 9
+   -- 10
+   -- (10 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+2. Write a query that returns customer and employee pairs that had order activity in January 2016 but not in February 2016:
+
+   - Table involved: _Sales.Orders_ table
+   - Desired output:
+
+   ````sql
+   -- custid      empid
+   -- ----------- -----------
+   -- 1           1
+   -- 3           3
+   -- 5           8
+   -- 5           9
+   -- 6           9
+   -- 7           6
+   -- 9           1
+   -- 12          2
+   -- 16          7
+   -- ...
+   -- 89          4
+   -- (50 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+3. Write a query that returns customer and employee pairs that had order activity in both January 2016 and February 2016:
+
+   - Table involved: _Sales.Orders_
+   - Desired output:
+
+   ````sql
+   -- custid      empid
+   -- ----------- -----------
+   -- 20          3
+   -- 39          9
+   -- 46          5
+   -- 67          1
+   -- 71          4
+   -- (5 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+4. Write a query that returns customer and employee pairs that had order activity in both January 2016 and February 2016 but not in 2015:
+
+   - Table involved: _Sales.Orders_
+   - Desired output:
+
+   ````sql
+   -- custid      empid
+   -- ----------- -----------
+   -- 67          1
+   -- 46          5
+   -- (2 row(s) affected)
+   ````
+
+   ````sql
+   
+   ````
+
+5. You are given the following query:
+
+   ````sql
+   SELECT country, region, city
+   FROM HR.Employees
+   UNION ALL
+   SELECT country, region, city
+   FROM Production.Suppliers
+   ````
+
+   You are asked to add logic to the query so that it guarantees that the rows from _Employees_ are returned in the output before the rows from _Suppliers_. Also, within each segment, the rows should be sorted by _country_, _region_, and _city_:
+
+   - Tables involved: _HR.Employees_ and _Production.Suppliers_
+   - Desired output:
+
+   ````sql
+   -- country         region          city
+   -- --------------- --------------- ---------------
+   -- UK              NULL            London
+   -- UK              NULL            London
+   -- UK              NULL            London
+   -- UK              NULL            London
+   -- USA             WA              Kirkland
+   -- USA             WA              Redmond
+   -- USA             WA              Seattle
+   -- USA             WA              Seattle
+   -- ...
+   -- Singapore       NULL            Singapore
+   -- Spain           Asturias        Oviedo
+   -- Sweden          NULL            Göteborg
+   -- Sweden          NULL            Stockholm
+   -- ...
+   -- (38 row(s) affected)
+   ````
+
+## 7.  Beyond The Fundamentals Of Querying
