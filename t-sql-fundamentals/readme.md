@@ -3095,3 +3095,189 @@ The `INTERSECT` operator precedes `UNION` and `EXCEPT`, and `UNION` and `EXCEPT`
    ````
 
 ## 7.  Beyond The Fundamentals Of Querying
+
+### Window Functions
+
+````sql
+SELECT empid, ordermonth, val,
+	SUM(val) OVER(PARTITION BY empid
+                  ORDER BY ordermonth
+                  ROWS BETWEEN UNBOUNDED PRECEDING
+                  	AND CURRENT ROW) AS runval
+FROM Sales.EmpOrders
+-- empid  ordermonth  val      runval
+-- ------ ----------- -------- ----------
+-- 1      2014-07-01  1614.88  1614.88
+-- 1      2014-08-01  5555.90  7170.78
+-- 1      2014-09-01  6651.00  13821.78
+-- 1      2014-10-01  3933.18  17754.96
+-- 1      2014-11-01  9562.65  27317.61
+-- ...
+-- 2      2014-07-01  1176.00  1176.00
+-- 2      2014-08-01  1814.00  2990.00
+-- 2      2014-09-01  2950.80  5940.80
+-- 2      2014-10-01  5164.00  11104.80
+-- 2      2014-11-01  4614.58  15719.38
+-- ...
+-- (192 row(s) affected)
+````
+
+````sql
+SELECT orderid, custid, val,
+	ROW_NUMBER() OVER(PARTITION BY custid
+                      ORDER BY val) AS rownum
+FROM Sales.OrderValues
+ORDER BY custid, val
+-- orderid     custid      val          rownum
+-- ----------- ----------- ------------ -------
+-- 10702       1           330.00       1
+-- 10952       1           471.20       2
+-- 10643       1           814.50       3
+-- 10835       1           845.80       4
+-- 10692       1           878.00       5
+-- 11011       1           933.50       6
+-- 10308       2           88.80        1
+-- 10759       2           320.00       2
+-- 10625       2           479.75       3
+-- 10926       2           514.40       4
+-- 10682       3           375.50       1
+-- ...
+-- (830 row(s) affected)
+````
+
+### Ranking Window Functions
+
+- `ROW_NUMBER`: Assigns incremental sequential integers to the rows in the query result based on the mandatory window ordering.
+- `RANK`: Produce the same rank value given the same ordering value. Reflects the count of rows that have a lower ordering value than the current row.
+- `DENSE_RANK`: Produce the same rank value given the same ordering value. Reflects the count of distinct ordering values that are lower than the current row.
+- `NTILE`: Associate the rows in the result with tiles (equally sized groups of rows) by assigning a tile number to each row.
+
+````sql
+SELECT orderid, custid, val,
+	ROW_NUMBER() OVER(ORDER BY val) AS rownum,
+    RANK()       OVER(ORDER BY val) AS rank,
+    DENSE_RANK() OVER(ORDER BY val) AS dense_rank,
+    NTILE(100)   OVER(ORDER BY val) AS ntile
+FROM Sales.OrderValues
+ORDER BY val
+-- orderid     custid      val       rownum  rank    dense_rank ntile
+-- ----------- ----------- --------- ------- ------- ---------- -----
+-- 10782       12          12.50     1       1       1          1
+-- 10807       27          18.40     2       2       2          1
+-- 10586       66          23.80     3       3       3          1
+-- 10767       76          28.00     4       4       4          1
+-- 10898       54          30.00     5       5       5          1
+-- 10900       88          33.75     6       6       6          1
+-- 10883       48          36.00     7       7       7          1
+-- 11051       41          36.00     8       7       7          1
+-- 10815       71          40.00     9       9       8          1
+-- 10674       38          45.00     10      10      9          1
+-- ...
+-- 10691       63          10164.80  821     821     786        10
+-- 10540       63          10191.70  822     822     787        10
+-- 10479       65          10495.60  823     823     788        10
+-- 10897       37          10835.24  824     824     789        10
+-- 10817       39          10952.85  825     825     790        10
+-- 10417       73          11188.40  826     826     791        10
+-- 10889       65          11380.00  827     827     792        10
+-- 11030       71          12615.05  828     828     793        10
+-- 10981       34          15810.00  829     829     794        10
+-- 10865       63          16387.50  830     830     795        10
+-- (830 row(s) affected)
+````
+
+### Offset Window Functions
+
+- `LAG` and `LEAD`: Obtain an element from a row that is at a certain offset from the current row within the partition,based on the indicated ordering. The `LAG` function looks before the current row, and the `LEAD` function looks ahead.
+- `FIRST_VALUE` and `LAST_VALUE`: Return an element from the first and last rows in the window frame, respectively.
+
+````sql
+SELECT custid, orderid, val,
+	LAG(val)  OVER(PARTITION BY custid
+                   ORDER BY orderdate, orderid) AS prevval,
+    LEAD(val) OVER(PARTITION BY custid
+                   ORDER BY orderdate, orderid) AS nextval
+FROM Sales.OrderValues
+ORDER BY custid, orderdate, orderid
+-- custid  orderid  val      prevval  nextval
+-- ------- -------- -------- -------- --------
+-- 1       10643    814.50   NULL     878.00
+-- 1       10692    878.00   814.50   330.00
+-- 1       10702    330.00   878.00   845.80
+-- 1       10835    845.80   330.00   471.20
+-- 1       10952    471.20   845.80   933.50
+-- 1       11011    933.50   471.20   NULL
+-- 2       10308    88.80    NULL     479.75
+-- 2       10625    479.75   88.80    320.00
+-- 2       10759    320.00   479.75   514.40
+-- 2       10926    514.40   320.00   NULL
+-- 3       10365    403.20   NULL     749.06
+-- 3       10507    749.06   403.20   1940.85
+-- 3       10535    1940.85  749.06   2082.00
+-- 3       10573    2082.00  1940.85  813.37
+-- 3       10677    813.37   2082.00  375.50
+-- 3       10682    375.50   813.37   660.00
+-- 3       10856    660.00   375.50   NULL
+-- ...
+-- (830 row(s) affected)
+````
+
+````sql
+SELECT custid, orderid, val,
+	FIRST_VALUE(val) OVER(PARTITION BY custid
+                          ORDER BY orderdate, orderid
+                          ROWS BETWEEN UNBOUNDED PRECEDING
+                          	AND CURRENT ROW) AS firstval,
+	LAST_VALUE(val)  OVER(PARTITION BY custid
+                          ORDER BY orderdate, orderid
+                          ROWS BETWEEN CURRENT ROW
+                          	AND UNBOUNDED FOLLOWING) AS lastval
+FROM Sales.OrderValues
+ORDER BY custid, orderdate, orderid
+-- custid  orderid  val      firstval  lastval
+-- ------- -------- -------- --------- --------
+-- 1       10643    814.50   814.50    933.50
+-- 1       10692    878.00   814.50    933.50
+-- 1       10702    330.00   814.50    933.50
+-- 1       10835    845.80   814.50    933.50
+-- 1       10952    471.20   814.50    933.50
+-- 1       11011    933.50   814.50    933.50
+-- 2       10308    88.80    88.80     514.40
+-- 2       10625    479.75   88.80     514.40
+-- 2       10759    320.00   88.80     514.40
+-- 2       10926    514.40   88.80     514.40
+-- 3       10365    403.20   403.20    660.00
+-- 3       10507    749.06   403.20    660.00
+-- 3       10535    1940.85  403.20    660.00
+-- 3       10573    2082.00  403.20    660.00
+-- 3       10677    813.37   403.20    660.00
+-- 3       10682    375.50   403.20    660.00
+-- 3       10856    660.00   403.20    660.00
+-- ...
+-- (830 row(s) affected)
+````
+
+### Aggregate Window Functions
+
+````sql
+SELECT orderid, custid, val,
+	SUM(val) OVER() AS totalvalue,
+    SUM(val) OVER(PARTITION BY custid) AS custtotalvalue
+FROM Sales.OrderValues
+-- orderid     custid      val          totalvalue       custtotalvalue
+-- ----------- ----------- ------------ ---------------- ---------------
+-- 10643       1           814.50       1265793.22       4273.00
+-- 10692       1           878.00       1265793.22       4273.00
+-- 10702       1           330.00       1265793.22       4273.00
+-- 10835       1           845.80       1265793.22       4273.00
+-- 10952       1           471.20       1265793.22       4273.00
+-- 11011       1           933.50       1265793.22       4273.00
+-- 10926       2           514.40       1265793.22       1402.95
+-- 10759       2           320.00       1265793.22       1402.95
+-- 10625       2           479.75       1265793.22       1402.95
+-- 10308       2           88.80        1265793.22       1402.95
+-- 10365       3           403.20       1265793.22       7023.98
+-- ...
+-- (830 row(s) affected)
+````
+
