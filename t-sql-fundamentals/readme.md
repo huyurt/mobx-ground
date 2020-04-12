@@ -2549,7 +2549,14 @@ FROM Sales.Customers AS C
    Explain what the problem is, and suggest a valid solution.
 
    ````sql
-   
+   WITH C AS
+   (
+       SELECT *, DATEFROMPARTS(YEAR(orderdate), 12, 31) AS endofyear
+       FROM Sales.Orders
+   )
+   SELECT orderid, orderdate, custid, empid, endofyear
+   FROM C
+   WHERE orderdate <> endofyear
    ````
 
 2. Write a query that returns the maximum value in the _orderdate_ column for each employee:
@@ -2573,7 +2580,9 @@ FROM Sales.Customers AS C
    ````
 
    ````sql
-   
+   SELECT empid, MAX(orderdate) AS maxorderdate
+   FROM Sales.Orders
+   GROUP BY empid
    ````
 
 3. Encapsulate the query from Exercise 2 in a derived table. Write a join query between the derived table and the _Orders_ table to return the orders with the maximum order date for each employee: 
@@ -2598,7 +2607,12 @@ FROM Sales.Customers AS C
    ````
 
    ````sql
-   
+   SELECT O.empid, O.orderdate, O.orderid, O.custid
+   FROM Sales.Orders AS O
+   INNER JOIN (SELECT empid, MAX(orderdate) AS maxorderdate
+               FROM Sales.Orders
+               GROUP BY empid) AS D
+   	ON O.empid = D.empid AND O.orderdate = D.maxorderdate
    ````
 
 4. Write a query that calculates a row number for each order based on _orderdate_, _orderid_ ordering: 
@@ -2624,7 +2638,9 @@ FROM Sales.Customers AS C
    ````
 
    ````sql
-   
+   SELECT orderid, orderdate, custid, empid,
+   	ROW_NUMBER() OVER(ORDER BY orderdate, orderid) AS rownum
+   FROM Sales.Orders
    ````
 
 5. Write a query that returns rows with row numbers 11 through 20 based on the row-number definition in Exercise 4. Use a CTE to encapsulate the code from Exercise 4:
@@ -2649,7 +2665,12 @@ FROM Sales.Customers AS C
    ````
 
    ````sql
-   
+   WITH OrdersRN AS(
+       SELECT orderid, orderdate, custid, empid,
+       	ROW_NUMBER() OVER(ORDER BY orderdate, orderid) AS rownum
+       FROM Sales.Orders
+   )
+   SELECT * FROM OrdersRN WHERE rownum BETWEEN 11 AND 20
    ````
 
 6. Write a solution using a recursive CTE that returns the management chain leading to Patricia Doyle (employee ID 9):
@@ -2668,7 +2689,18 @@ FROM Sales.Customers AS C
    ````
 
    ````sql
-   
+   WITH EmpsCTE AS(
+       SELECT empid, mgrid, firstname, lastname
+       FROM HR.Employees
+       WHERE empid = 9
+       UNION ALL
+       SELECT P.empid, P.mgrid, P.firstname, P.lastname
+       FROM EmpsCTE AS C
+       	INNER JOIN HR.Employees AS P
+       		ON C.mgrid = P.empid
+   )
+   SELECT empid, mgrid, firstname, lastname
+   FROM EmpsCTE
    ````
 
 7. Create a view that returns the total quantity for each employee and year:
@@ -2716,7 +2748,20 @@ FROM Sales.Customers AS C
    ````
 
    ````sql
-   
+   DROP VIEW IF EXISTS Sales.VEmpOrders;
+   GO
+   CREATE VIEW Sales.VEmpOrders
+   AS
+   WITH orders AS (
+   	SELECT o.empid, YEAR(o.orderdate) AS orderdate, od.qty
+   	FROM Sales.Orders o, Sales.OrderDetails od
+   	WHERE o.orderid = od.orderid
+   )
+   SELECT orders.empid, orders.orderdate, SUM(orders.qty) AS qty
+   FROM orders
+   GROUP BY orders.empid, orders.orderdate
+   ORDER BY orders.empid, orders.orderdate
+   GO
    ````
 
 8. Write a query against _Sales.VEmpOrders_ that returns the running total quantity for each employee and year:
@@ -2758,7 +2803,13 @@ FROM Sales.Customers AS C
    ````
 
    ````sql
-   
+   SELECT empid, orderyear, qty,
+   	(SELECT SUM(qty)
+        FROM Sales.VEmpOrders AS V2
+        WHERE V2.empid = V1.empid
+        	AND V2.orderyear <= V1.orderyear) AS runqty
+   FROM Sales.VEmpOrders AS V1
+   ORDER BY empid, orderyear
    ````
 
 9. Create an inline TVF that accepts as inputs a supplier ID (_@supid AS INT_) and a requested number of products (_@n AS INT_). The function should return _@n_ products with the highest unit prices that are supplied by the specified supplier ID:
@@ -2781,7 +2832,11 @@ FROM Sales.Customers AS C
    ````
 
    ````sql
-   
+   SELECT productid, productname, unitprice
+   FROM Production.Products
+   WHERE supplierid = @supid
+   ORDER BY unitprice DESC
+   OFFSET 0 ROWS FETCH NEXT @n ROWS ONLY
    ````
 
 10. Using the `CROSS APPLY` operator and the function you created in Exercise 9, return the two most expensive products for each supplier:
@@ -2812,7 +2867,9 @@ FROM Sales.Customers AS C
     ````
 
     ````sql
-    
+    SELECT S.supplierid, S.companyname, P.productid, P.productname, P.unitprice
+    FROM Production.Suppliers AS S
+    	CROSS APPLY Production.TopProducts(S.supplierid, 2) AS P
     ````
 
 ## 6. Set Operators
@@ -2824,7 +2881,7 @@ FROM Sales.Customers AS C
 
 ### The `UNION` Operator
 
-![union](C:\Users\PC\IntelliJIDEAProjects\book-summary\t-sql-fundamentals\images\union.png)
+![union](images\union.png)
 
 ````sql
 SELECT country, region, city 
@@ -2880,7 +2937,7 @@ FROM Sales.Customers
 
 The `INTERSECT` operator returns only the rows that are common to the results of the two input queries.
 
-![intersect](C:\Users\PC\IntelliJIDEAProjects\book-summary\t-sql-fundamentals\images\intersect.png)
+![intersect](images\intersect.png)
 
 ````sql
 SELECT country, region, city 
@@ -2930,7 +2987,7 @@ FROM INTERSECT_ALL
 
 The `EXCEPT` operator returns only distinct rows that appear in the first set but not the second.
 
-![except](C:\Users\PC\IntelliJIDEAProjects\book-summary\t-sql-fundamentals\images\except.png)
+![except](images\except.png)
 
 ````sql
 SELECT country, region, city 
@@ -2993,7 +3050,16 @@ The `INTERSECT` operator precedes `UNION` and `EXCEPT`, and `UNION` and `EXCEPT`
    ````
 
    ````sql
-   
+   SELECT 1 AS n
+   UNION ALL SELECT 2
+   UNION ALL SELECT 3
+   UNION ALL SELECT 4
+   UNION ALL SELECT 5
+   UNION ALL SELECT 6
+   UNION ALL SELECT 7
+   UNION ALL SELECT 8
+   UNION ALL SELECT 9
+   UNION ALL SELECT 10
    ````
 
 2. Write a query that returns customer and employee pairs that had order activity in January 2016 but not in February 2016:
@@ -3019,7 +3085,13 @@ The `INTERSECT` operator precedes `UNION` and `EXCEPT`, and `UNION` and `EXCEPT`
    ````
 
    ````sql
-   
+   SELECT custid, empid
+   FROM Sales.Orders
+   WHERE orderdate >= '20160101' AND orderdate < '20160201'
+   EXCEPT
+   SELECT custid, empid
+   FROM Sales.Orders
+   WHERE orderdate >= '20160201' AND orderdate < '20160301'
    ````
 
 3. Write a query that returns customer and employee pairs that had order activity in both January 2016 and February 2016:
@@ -3039,7 +3111,13 @@ The `INTERSECT` operator precedes `UNION` and `EXCEPT`, and `UNION` and `EXCEPT`
    ````
 
    ````sql
-   
+   SELECT custid, empid
+   FROM Sales.Orders
+   WHERE orderdate >= '20160101' AND orderdate < '20160201'
+   INTERSECT
+   SELECT custid, empid
+   FROM Sales.Orders
+   WHERE orderdate >= '20160201' AND orderdate < '20160301'
    ````
 
 4. Write a query that returns customer and employee pairs that had order activity in both January 2016 and February 2016 but not in 2015:
@@ -3056,7 +3134,17 @@ The `INTERSECT` operator precedes `UNION` and `EXCEPT`, and `UNION` and `EXCEPT`
    ````
 
    ````sql
-   
+   SELECT custid, empid
+   FROM Sales.Orders
+   WHERE orderdate >= '20160101' AND orderdate < '20160201'
+   INTERSECT
+   SELECT custid, empid
+   FROM Sales.Orders
+   WHERE orderdate >= '20160201' AND orderdate < '20160301'
+   EXCEPT
+   SELECT custid, empid
+   FROM Sales.Orders
+   WHERE orderdate >= '20150101' AND orderdate < '20160101'
    ````
 
 5. You are given the following query:
@@ -3092,6 +3180,16 @@ The `INTERSECT` operator precedes `UNION` and `EXCEPT`, and `UNION` and `EXCEPT`
    -- Sweden          NULL            Stockholm
    -- ...
    -- (38 row(s) affected)
+   ````
+   
+   ````sql
+   SELECT country, region, city
+   FROM (SELECT 1 AS sortcol, country, region, city
+         FROM HR.Employees
+         UNION ALL
+         SELECT 2, country, region, city
+         FROM Production.Suppliers) AS D
+   ORDER BY sortcol, country, region, city
    ````
 
 ## 7.  Beyond The Fundamentals Of Querying
