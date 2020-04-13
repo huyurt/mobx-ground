@@ -3192,7 +3192,7 @@ The `INTERSECT` operator precedes `UNION` and `EXCEPT`, and `UNION` and `EXCEPT`
    ORDER BY sortcol, country, region, city
    ````
 
-## 7.  Beyond The Fundamentals Of Querying
+## 7. Beyond The Fundamentals Of Querying
 
 ### Window Functions
 
@@ -3378,4 +3378,438 @@ FROM Sales.OrderValues
 -- ...
 -- (830 row(s) affected)
 ````
+
+You define ordering based on _ordermonth_, giving meaning to the window frame: `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`. This frame means all activity from the beginning of the partition until the current month.
+
+````sql
+SELECT empid, ordermonth, val,
+	SUM(val) OVER(PARTITION BY empid
+                  ORDER BY ordermonth
+                  ROWS BETWEEN UNBOUNDED PRECEDING
+                  	AND CURRENT ROW) AS runval
+FROM Sales.EmpOrders
+-- empid  ordermonth  val      runval
+-- ------ ----------- -------- ----------
+-- 1      2014-07-01  1614.88  1614.88
+-- 1      2014-08-01  5555.90  7170.78
+-- 1      2014-09-01  6651.00  13821.78
+-- 1      2014-10-01  3933.18  17754.96
+-- 1      2014-11-01  9562.65  27317.61
+-- ...
+-- 2      2014-07-01  1176.00  1176.00
+-- 2      2014-08-01  1814.00  2990.00
+-- 2      2014-09-01  2950.80  5940.80
+-- 2      2014-10-01  5164.00  11104.80
+-- 2      2014-11-01  4614.58  15719.38
+-- ...
+-- (192 row(s) affected)
+````
+
+You can indicate an offset back from the current row as well as an offset forward. For example, to capture all rows from two rows before the current row until one row ahead, you use `ROWS BETWEEN 2 PRECEDING AND 1 FOLLOWING`. Also, if you don't want an upper bound, you can use `UNBOUNDED FOLLOWING`.
+
+#### Pivoting data
+
+Pivoting data involves rotating data from a state of rows to a state of columns, possibly aggregating values along the way.
+
+````sql
+SELECT empid, custid, SUM(qty) AS sumqty
+FROM dbo.Orders
+GROUP BY empid, custid
+-- empid       custid    sumqty
+-- ----------- --------- -----------
+-- 2           A         52
+-- 3           A         20
+-- 1           B         20
+-- 2           B         27
+-- 1           C         34
+-- 3           C         22
+-- 3           D         30
+````
+
+![pivotingdata](images\pivotingdata.png)
+
+##### Pivoting with a grouped query
+
+````sql
+SELECT empid,
+	SUM(CASE WHEN custid = 'A' THEN qty END) AS A,
+    SUM(CASE WHEN custid = 'B' THEN qty END) AS B,
+    SUM(CASE WHEN custid = 'C' THEN qty END) AS C,
+    SUM(CASE WHEN custid = 'D' THEN qty END) AS D
+FROM dbo.Orders
+GROUP BY empid
+````
+
+##### Pivoting with the `PIVOT` operator
+
+````sql
+SELECT ...
+FROM <input_table>
+	PIVOT(<agg_function>(<aggregation_element>)
+          	FOR <spreading_element> IN (<list_of_target_columns>)) AS
+<result_table_alias>
+WHERE ...
+````
+
+````sql
+SELECT empid, A, B, C, D
+FROM (SELECT empid, custid, qty
+      FROM dbo.Orders) AS D  
+	PIVOT(SUM(qty) FOR custid IN(A, B, C, D)) AS P
+````
+
+##### Unpivoting with the `APPLY` operator
+
+Unpivoting involves three logical processing phases: producing copies, extracting values, and eliminating irrelevant rows.
+
+````sql
+SELECT *
+FROM dbo.EmpCustOrders
+	CROSS JOIN (VALUES('A'),('B'),('C'),('D')) AS C(custid)
+-- empid       A           B           C           D           custid
+-- ----------- ----------- ----------- ----------- ----------- ------
+-- 1           NULL        20          34          NULL        A
+-- 1           NULL        20          34          NULL        B
+-- 1           NULL        20          34          NULL        C
+-- 1           NULL        20          34          NULL        D
+-- 2           52          27          NULL        NULL        A
+-- 2           52          27          NULL        NULL        B
+-- 2           52          27          NULL        NULL        C
+-- 2           52          27          NULL        NULL        D
+-- 3           20          NULL        22          30          A
+-- 3           20          NULL        22          30          B
+-- 3           20          NULL        22          30          C
+-- 3           20          NULL        22          30          D
+````
+
+##### Unpivoting with the `UNPIVOT` operator
+
+````sql
+SELECT ...
+FROM <input_table>
+	UNPIVOT(<values_column> FOR <names_column> IN(<source_columns>)) AS
+<result_table_alias>
+WHERE ...
+````
+
+````sql
+SELECT empid, custid, qty
+FROM dbo.EmpCustOrders
+	UNPIVOT(qty FOR custid IN(A, B, C, D)) AS U
+````
+
+#### Grouping sets with `GROUP BY`
+
+#### The `GROUPING SETS` subclause
+
+````sql
+SELECT empid, custid, SUM(qty) AS sumqty
+FROM dbo.Orders
+GROUP BY
+	GROUPING SETS
+    (
+        (empid, custid),
+        (empid),
+        (custid),
+        ()
+    )
+````
+
+The last grouping set is the empty grouping set representing the grand total. This query is a logical equivalent of the previous solution that unified the result sets of four aggregate queries. Only this one is much shorter, plus it gets optimized better.
+
+#### The `CUBE` subclause
+
+`CUBE(a, b, c)` is equivalent to `GROUPING SETS( (a, b, c), (a, b), (a, c), (b, c), (a), (b), (c), () )`. In set theory, the set of all subsets of elements that can be produced from a particular set is called the power set.
+
+````sql
+SELECT empid, custid, SUM(qty) AS sumqty
+FROM dbo.Orders
+GROUP BY CUBE(empid, custid)
+````
+
+#### The `ROLLUP` subclause
+
+`ROLLUP` assumes a hierarchy among the input members and produces only grouping sets that form leading combinations of the input members.
+
+````sql
+GROUPING SETS(
+    (YEAR(orderdate), MONTH(orderdate), DAY(orderdate)),
+    (YEAR(orderdate), MONTH(orderdate)),
+    (YEAR(orderdate)),
+    () )
+
+ROLLUP(YEAR(orderdate), MONTH(orderdate), DAY(orderdate))
+````
+
+````sql
+SELECT YEAR(orderdate) AS orderyear, MONTH(orderdate) AS ordermonth,
+	DAY(orderdate) AS orderday, SUM(qty) AS sumqty
+FROM dbo.Orders
+GROUP BY ROLLUP(YEAR(orderdate), MONTH(orderdate), DAY(orderdate))
+-- orderyear   ordermonth     orderday    sumqty
+-- ----------- -------------- ----------- -----------
+-- 2014        4              18          22
+-- 2014        4              NULL        22
+-- 2014        8              2           10
+-- 2014        8              NULL        10
+-- 2014        12             24          32
+-- 2014        12             NULL        32
+-- 2014        NULL           NULL        64
+-- 2015        1              9           40
+-- 2015        1              18          14
+-- 2015        1              NULL        54
+-- 2015        2              12          12
+-- 2015        2              NULL        12
+-- 2015        NULL           NULL        66
+-- 2016        2              12          10
+-- 2016        2              16          20
+-- 2016        2              NULL        30
+-- 2016        4              18          15
+-- 2016        4              NULL        15
+-- 2016        9              7           30
+-- 2016        9              NULL        30
+-- 2016        NULL           NULL        75
+-- NULL        NULL           NULL        205
+````
+
+#### The `GROUPING` and `GROUPING_ID` functions
+
+````sql
+SELECT GROUPING(empid) AS grpemp, GROUPING(custid) AS grpcust, empid,
+	custid, SUM(qty) AS sumqty
+FROM dbo.Orders
+GROUP BY CUBE(empid, custid)
+-- grpemp    grpcust    empid       custid    sumqty
+-- --------- ---------- ----------- --------- -----------
+-- 0         0          2           A         52
+-- 0         0          3           A         20
+-- 1         0          NULL        A         72
+-- 0         0          1           B         20
+-- 0         0          2           B         27
+-- 1         0          NULL        B         47
+-- 0         0          1           C         34
+-- 0         0          3           C         22
+-- 1         0          NULL        C         56
+-- 0         0          3           D         30
+-- 1         0          NULL        D         30
+-- 1         1          NULL        NULL      205
+-- 0         1          1           NULL      54
+-- 0         1          2           NULL      79
+-- 0         1          3           NULL      72
+-- (15 row(s) affected)
+````
+
+````sql
+SELECT GROUPING_ID(empid, custid) AS groupingset, empid, custid, SUM(qty) AS sumqty
+FROM dbo.Orders
+GROUP BY CUBE(empid, custid)
+-- groupingset    empid       custid    sumqty
+-- -------------- ----------- --------- -----------
+-- 0              2           A         52
+-- 0              3           A         20
+-- 2              NULL        A         72
+-- 0              1           B         20
+-- 0              2           B         27
+-- 2              NULL        B         47
+-- 0              1           C         34
+-- 0              3           C         22
+-- 2              NULL        C         56
+-- 0              3           D         30
+-- 2              NULL        D         30
+-- 3              NULL        NULL      205
+-- 1              1           NULL      54
+-- 1              2           NULL      79
+-- 1              3           NULL      72
+````
+
+### Exercises
+
+1. Write a query against the _dbo.Orders_ table that computes both a rank and a dense rank for each customer order, partitioned by _custid_ and ordered by _qty_:
+
+   - Table involved: _TSQLV4_ database, _dbo.Orders_ table
+   - Desired output:
+
+   ````sql
+   -- custid orderid     qty         rnk                  drnk
+   -- ------ ----------- ----------- -------------------- --------------------
+   -- A      30001       10          1                    1
+   -- A      40005       10          1                    1
+   -- A      10001       12          3                    2
+   -- A      40001       40          4                    3
+   -- B      20001       12          1                    1
+   -- B      30003       15          2                    2
+   -- B      10005       20          3                    3
+   -- C      10006       14          1                    1
+   -- C      20002       20          2                    2
+   -- C      30004       22          3                    3
+   -- D      30007       30          1                    1
+   ````
+
+   ````sql
+   SELECT custid, orderid, qty,
+   	RANK() OVER(PARTITION BY custid ORDER BY qty) AS rnk,
+       DENSE_RANK() OVER(PARTITION BY custid ORDER BY qty) AS drnk
+   FROM dbo.Orders
+   ````
+
+2. Write a query against the _dbo.Orders_ table that computes for each customer order both the difference between the current order quantity and the customer’s previous order quantity and the difference between the current order quantity and the customer’s next order quantity:
+
+   - Table involved: _TSQLV4_ database, _dbo.Orders_ table
+   - Desired output:
+
+   ````sql
+   -- custid orderid     qty         diffprev    diffnext
+   -- ------ ----------- ----------- ----------- -----------
+   -- A      30001       10          NULL        -2
+   -- A      10001       12          2           -28
+   -- A      40001       40          28          30
+   -- A      40005       10          -30         NULL
+   -- B      10005       20          NULL        8
+   -- B      20001       12          -8          -3
+   -- B      30003       15          3           NULL
+   -- C      30004       22          NULL        8
+   -- C      10006       14          -8          -6
+   -- C      20002       20          6           NULL
+   -- D      30007       30          NULL        NULL
+   ````
+
+   ````sql
+   SELECT custid, orderid, qty,
+   	qty - LAG(qty) OVER(PARTITION BY custid
+                           ORDER BY orderdate, orderid) AS diffprev,
+       qty - LEAD(qty) OVER(PARTITION BY custid
+                            ORDER BY orderdate, orderid) AS diffnext
+   FROM dbo.Orders
+   ````
+
+3. Write a query against the _dbo.Orders_ table that returns a row for each employee, a column for each order year, and the count of orders for each employee and order year:
+
+   - Table involved: _TSQLV4_ database, _dbo.Orders_ table
+   - Desired output:
+
+   ````sql
+   -- empid       cnt2014     cnt2015     cnt2016
+   -- ----------- ----------- ----------- -----------
+   -- 1           1           1           1
+   -- 2           1           2           1
+   -- 3           2           0           2
+   ````
+
+   ````sql
+   SELECT empid, [2014] AS cnt2014, [2015] AS cnt2015, [2016] AS cnt2016
+   FROM (SELECT empid, YEAR(orderdate) AS orderyear
+         FROM dbo.Orders) AS D
+   	PIVOT(COUNT(orderyear)
+             FOR orderyear IN([2014], [2015], [2016])) AS P
+   ````
+
+4. ````sql
+   USE TSQLV4;
+   DROP TABLE IF EXISTS dbo.EmpYearOrders;
+   CREATE TABLE dbo.EmpYearOrders(
+       empid INT NOT NULL CONSTRAINT PK_EmpYearOrders PRIMARY KEY,
+       cnt2014 INT NULL,
+       cnt2015 INT NULL,
+       cnt2016 INT NULL
+   );
+   INSERT INTO dbo.EmpYearOrders(empid, cnt2014, cnt2015, cnt2016)
+   	SELECT empid, [2014] AS cnt2014, [2015] AS cnt2015, [2016] AScnt2016
+       FROM (SELECT empid, YEAR(orderdate) AS orderyear
+             FROM dbo.Orders) AS D
+   		PIVOT(COUNT(orderyear)
+                 FOR orderyear IN([2014], [2015], [2016])) AS P;
+   SELECT * FROM dbo.EmpYearOrders;
+   -- empid       cnt2014     cnt2015     cnt2016
+   -- ----------- ----------- ----------- -----------
+   -- 1           1           1           1
+   -- 2           1           2           1
+   -- 3           2           0           2
+   ````
+
+   Write a query against the _EmpYearOrders_ table that unpivots the data, returning a row for each employee and order year with the number of orders. Exclude rows in which the number of orders is 0 (in this example, employee 3 in the year 2015).
+
+   - Desired output:
+
+   ````sql
+   -- empid       orderyear   numorders
+   -- ----------- ----------- -----------
+   -- 1           2014        1
+   -- 1           2015        1
+   -- 1           2016        1
+   -- 2           2014        1
+   -- 2           2015        2
+   -- 2           2016        1
+   -- 3           2014        2
+   -- 3           2016        2
+   ````
+
+   ````sql
+   SELECT empid, CAST(RIGHT(orderyear, 4) AS INT) AS orderyear, numorders
+   FROM dbo.EmpYearOrders
+   	UNPIVOT(numorders FOR orderyear IN(cnt2014, cnt2015, cnt2016)) AS U
+   WHERE numorders <> 0
+   ````
+
+5. Write a query against the _dbo.Orders_ table that returns the total quantities for each of the following: (employee, customer, and order year), (employee and order year), and (customer and order year). Include a result column in the output that uniquely identifies the grouping set with which the current row is associated:
+
+   - Table involved: _TSQLV4_ database, _dbo.Orders_ table
+   - Desired output:
+
+   ````sql
+   -- groupingset    empid       custid    orderyear   sumqty
+   -- -------------- ----------- --------- ----------- -----------
+   -- 0              2           A         2014        12
+   -- 0              3           A         2014        10
+   -- 4              NULL        A         2014        22
+   -- 0              2           A         2015        40
+   -- 4              NULL        A         2015        40
+   -- 0              3           A         2016        10
+   -- 4              NULL        A         2016        10
+   -- 0              1           B         2014        20
+   -- 4              NULL        B         2014        20
+   -- 0              2           B         2015        12
+   -- 4              NULL        B         2015        12
+   -- 0              2           B         2016        15
+   -- 4              NULL        B         2016        15
+   -- 0              3           C         2014        22
+   -- 4              NULL        C         2014        22
+   -- 0              1           C         2015        14
+   -- 4              NULL        C         2015        14
+   -- 0              1           C         2016        20
+   -- 4              NULL        C         2016        20
+   -- 0              3           D         2016        30
+   -- 4              NULL        D         2016        30
+   -- 2              1           NULL      2014        20
+   -- 2              2           NULL      2014        12
+   -- 2              3           NULL      2014        32
+   -- 2              1           NULL      2015        14
+   -- 2              2           NULL      2015        52
+   -- 2              1           NULL      2016        20
+   -- 2              2           NULL      2016        15
+   -- 2              3           NULL      2016        40
+   -- (29 row(s) affected)
+   ````
+
+   ````sql
+   SELECT GROUPING_ID(empid, custid, YEAR(Orderdate)) AS groupingset,
+   	empid, custid, YEAR(Orderdate) AS orderyear, SUM(qty) AS sumqty
+   FROM dbo.Orders
+   GROUP BY
+   	GROUPING SETS
+       (
+           (empid, custid, YEAR(orderdate)),
+           (empid, YEAR(orderdate)),
+           (custid, YEAR(orderdate))
+       )
+   ````
+
+## 8. Data Modification
+
+Data Manipulation Language (DML): `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `TRUNCATE`, and `MERGE`
+
+### Inserting Data
+
+`INSERT VALUES`, `INSERT SELECT`, `INSERT EXEC`, `SELECT INTO`, and `BULK INSERT`
+
+#### The `INSERT VALUES` statement
 
