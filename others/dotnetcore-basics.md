@@ -39,7 +39,7 @@ dotnet ef migrations list
 ## Update (or Create) Database
 
 ````
-dotnet ef database update -- --environment Production
+dotnet ef database update --environment Production
 ````
 
 ## References
