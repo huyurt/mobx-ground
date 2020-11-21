@@ -1,0 +1,1 @@
+- [.Net Core Basics](dotnetcore-basics.md)
